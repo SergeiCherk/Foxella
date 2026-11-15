@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- The target-weight check reads like a conversation: the button asks "За какой срок я дойду до
+  цели?" and the answers say plainly whether the pace is safe (the calculation is unchanged).
 - `/start` greets with the Foxella picture (`src/nutrition_bot/assets/welcome.jpg`); if the picture
   cannot be sent, the greeting is plain text.
 - A permanent button panel under the input field (menu, shopping list, "not by plan", profile) is

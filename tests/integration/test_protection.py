@@ -109,15 +109,15 @@ async def test_ten_kilos_in_one_week_is_refused(app: BotHarness) -> None:
     await app.press("goalcheck:start")
     await app.say("54,5")
     result = await app.say("1")
-    assert "Так быстро безопасно не получится" in result[-1].text
-    assert "за 1 нед." in result[-1].text
+    assert "слишком быстро" in result[-1].text
+    assert "За 1 нед." in result[-1].text
 
 
 async def test_typed_terms_are_understood(app: BotHarness) -> None:
     await app.onboard()
     await app.press("goalcheck:start")
     await app.say("60 кг")
-    assert (await app.say("24 недели"))[-1].text.startswith("Это реальный срок")
+    assert (await app.say("24 недели"))[-1].text.startswith("Отличный план")
 
 
 async def test_a_target_that_contradicts_the_goal_is_asked_again(app: BotHarness) -> None:
@@ -151,7 +151,7 @@ async def test_a_bad_term_is_asked_again(app: BotHarness, bad_weeks: str) -> Non
     await app.say("60")
     result = await app.say(bad_weeks)
     assert result[-1].text == texts.GOAL_BAD_WEEKS.format(max_weeks=104)
-    assert (await app.press("weeks:24"))[-1].text.startswith("Это реальный срок")
+    assert (await app.press("weeks:24"))[-1].text.startswith("Отличный план")
 
 
 async def test_no_safe_plan_for_a_very_small_user_points_to_a_doctor(app: BotHarness) -> None:
@@ -172,7 +172,7 @@ async def test_a_gain_goal_is_checked_too(app: BotHarness) -> None:
     assert "goalcheck:start" in replies[-1].buttons
     await app.press("goalcheck:start")
     await app.say("70")
-    assert (await app.press("weeks:4"))[-1].text.startswith("Так быстро")
+    assert "слишком быстро" in (await app.press("weeks:4"))[-1].text
 
 
 async def test_the_check_without_a_profile_asks_to_get_acquainted(app: BotHarness) -> None:
