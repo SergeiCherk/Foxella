@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WELCOME_IMAGE = Path(__file__).resolve().parent / "assets" / "welcome.jpg"
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 

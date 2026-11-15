@@ -53,7 +53,13 @@ class Transcript:
             quoted = "\n".join(
                 f"> {line}" if line else ">" for line in html_to_markdown(reply.text).splitlines()
             )
-            self.lines += [f"**Бот:**\n{quoted}", ""]
+            heading = "**Бот** (с картинкой Фокселы)**:**" if reply.is_photo else "**Бот:**"
+            self.lines += [f"{heading}\n{quoted}", ""]
+            if reply.panel:
+                self.lines += [
+                    "Кнопки внизу экрана: " + " · ".join(f"`{b}`" for b in reply.panel),
+                    "",
+                ]
             self.labels.update(zip(reply.buttons, reply.button_labels, strict=False))
             if reply.button_labels:
                 self.lines += ["Кнопки: " + " · ".join(f"`{b}`" for b in reply.button_labels), ""]

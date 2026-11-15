@@ -11,8 +11,8 @@ from typing import Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import SendMessage, TelegramMethod
-from aiogram.types import InlineKeyboardMarkup, Message, Update
+from aiogram.methods import SendMessage, SendPhoto, TelegramMethod
+from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup, Update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot.core.measures import Catalog
@@ -59,6 +59,8 @@ class Reply:
     text: str
     buttons: tuple[str, ...] = ()
     button_labels: tuple[str, ...] = ()
+    panel: tuple[str, ...] = ()  # labels of the permanent reply keyboard, if this message sets it
+    is_photo: bool = False
 
 
 @dataclass
@@ -104,17 +106,29 @@ class BotHarness:
     def _new_replies(self) -> list[Reply]:
         replies: list[Reply] = []
         for method in self.session.requests[self._seen :]:
-            if not isinstance(method, SendMessage):
+            if not isinstance(method, SendMessage | SendPhoto):
                 continue
             markup = method.reply_markup
             data: list[str] = []
             labels: list[str] = []
+            panel: list[str] = []
+            if isinstance(markup, ReplyKeyboardMarkup):
+                panel = [button.text for row in markup.keyboard for button in row]
             if isinstance(markup, InlineKeyboardMarkup):
                 for row in markup.inline_keyboard:
                     for button in row:
                         data.append(button.callback_data or "")
                         labels.append(button.text)
-            replies.append(Reply(method.text, tuple(data), tuple(labels)))
+            text = method.caption if isinstance(method, SendPhoto) else method.text
+            replies.append(
+                Reply(
+                    text or "",
+                    tuple(data),
+                    tuple(labels),
+                    tuple(panel),
+                    isinstance(method, SendPhoto),
+                )
+            )
         self._seen = len(self.session.requests)
         return replies
 

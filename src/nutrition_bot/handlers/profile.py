@@ -5,7 +5,7 @@ import logging
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot import texts
@@ -93,7 +93,10 @@ async def on_delete_yes(
         found = await UserRepository(session).delete_all(callback.from_user.id)
     logger.info("user data deleted")
     if message is not None:
-        await message.answer(texts.DELETE_DONE if found else texts.DELETE_NOTHING)
+        await message.answer(
+            texts.DELETE_DONE if found else texts.DELETE_NOTHING,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
 
 async def on_delete_no(callback: CallbackQuery) -> None:
@@ -107,6 +110,7 @@ async def on_delete_no(callback: CallbackQuery) -> None:
 def register(router: Router) -> None:
     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
     router.message.register(cmd_profile, Command("profile"))
+    router.message.register(cmd_profile, F.text == texts.BTN_NAV_PROFILE)
     router.callback_query.register(on_edit, F.data == "profile:edit")
     router.message.register(cmd_delete_me, Command("delete_me"))
     router.callback_query.register(on_delete_ask, F.data == "del:ask")

@@ -80,11 +80,14 @@ SHOPPING_EMPTY = "В меню пока нет продуктов, поэтому
 
 # ------------------------------------------------------------------ onboarding
 
-WELCOME_BACK = (
-    "С возвращением! Твои данные уже сохранены.\n"
-    "/menu — составить меню, /shopping — список покупок, /slip — если что-то пошло не по плану, "
-    "/profile — твои данные."
-)
+WELCOME_BACK = "С возвращением! Твои данные уже сохранены. Выбирай, что делаем, кнопками внизу 👇"
+# The permanent panel under the input field; the labels are also what the handlers listen for.
+BTN_NAV_MENU = "🍽 Меню"
+BTN_NAV_SHOPPING = "🛒 Покупки"
+BTN_NAV_SLIP = "🔄 Не по плану"
+BTN_NAV_PROFILE = "👤 Профиль"
+NAV_LABELS = (BTN_NAV_MENU, BTN_NAV_SHOPPING, BTN_NAV_SLIP, BTN_NAV_PROFILE)
+NAV_HINT = "Кнопки внизу всегда под рукой 👇 Меню, покупки и «Не по плану» теперь в одно касание."
 ASK_SEX = (
     "Давай познакомимся, это займёт минуту. Я посчитаю твою норму калорий и БЖУ.\n\n"
     "Для формулы мне нужен биологический пол:"
@@ -223,7 +226,10 @@ DELETE_CONFIRM = "Удалить все твои данные: профиль, �
 DELETE_DONE = "Готово, всё удалено. Если захочешь вернуться, просто нажми /start."
 DELETE_NOTHING = "У меня и так ничего о тебе не хранится."
 CANCELLED = "Хорошо, ничего не меняю."
-FALLBACK = "Я пока понимаю только команды: /start, /menu, /shopping, /slip, /profile, /delete_me."
+FALLBACK = (
+    "Я пока понимаю только кнопки внизу и команды: /start, /menu, /shopping, /slip, "
+    "/profile, /delete_me."
+)
 ERROR_GENERIC = "Что-то пошло не так на моей стороне. Попробуй ещё раз чуть позже."
 
 # ---------------------------------------------------------------------- buttons

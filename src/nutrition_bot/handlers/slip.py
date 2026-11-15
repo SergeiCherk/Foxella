@@ -229,6 +229,7 @@ async def _apply(
 def register(router: Router) -> None:
     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
     router.message.register(cmd_slip, Command("slip"))
+    router.message.register(cmd_slip, F.text == texts.BTN_NAV_SLIP)
     router.callback_query.register(on_slip_button, F.data == "slip:start")
     router.message.register(on_slip_text, SlipFlow.text, F.text, NOT_A_COMMAND)
     router.callback_query.register(on_slip_pick, SlipFlow.clarify, F.data.startswith("spick:"))

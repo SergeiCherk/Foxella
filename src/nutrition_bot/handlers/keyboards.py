@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from nutrition_bot import texts
@@ -16,6 +16,18 @@ def _build(rows: Sequence[Sequence[tuple[str, str]]]) -> InlineKeyboardMarkup:
             builder.button(text=label, callback_data=data)
     builder.adjust(*[len(row) for row in rows])
     return builder.as_markup()
+
+
+def main_keyboard() -> ReplyKeyboardMarkup:
+    """The permanent panel under the input field: the four things people do most."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=texts.BTN_NAV_MENU), KeyboardButton(text=texts.BTN_NAV_SHOPPING)],
+            [KeyboardButton(text=texts.BTN_NAV_SLIP), KeyboardButton(text=texts.BTN_NAV_PROFILE)],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 def sex_keyboard() -> InlineKeyboardMarkup:

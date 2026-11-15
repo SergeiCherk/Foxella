@@ -4,13 +4,14 @@ import logging
 import re
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot import texts
-from nutrition_bot.config import Settings
+from nutrition_bot.config import WELCOME_IMAGE, Settings
 from nutrition_bot.core.errors import InvalidProfileError, UnderageError
 from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.models import ActivityLevel, Goal, Profile, Sex
@@ -24,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 SessionFactory = async_sessionmaker[AsyncSession]
 _NUMBER = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:лет|года|год|см|кг)?")
-NOT_A_COMMAND = ~F.text.startswith("/")
+# Free-text steps must not swallow commands or the labels of the permanent panel.
+NOT_A_COMMAND = ~F.text.startswith("/") & ~F.text.in_(texts.NAV_LABELS)
 
 
 def parse_number(text: str) -> float | None:
@@ -44,6 +46,18 @@ async def begin_onboarding(message: Message, state: FSMContext) -> None:
     await message.answer(texts.ASK_SEX, reply_markup=keyboards.sex_keyboard())
 
 
+async def send_greeting(message: Message) -> None:
+    """The greeting picture with the first words; plain text if the picture cannot be sent."""
+    caption = f"{texts.START}\n\n{texts.DISCLAIMER}"
+    if WELCOME_IMAGE.is_file():
+        try:
+            await message.answer_photo(FSInputFile(WELCOME_IMAGE), caption=caption)
+            return
+        except TelegramAPIError:
+            logger.warning("welcome picture could not be sent")
+    await message.answer(caption)
+
+
 async def cmd_start(message: Message, state: FSMContext, session_factory: SessionFactory) -> None:
     """Greet, show the disclaimer and start onboarding for a new person."""
     await state.clear()
@@ -52,9 +66,9 @@ async def cmd_start(message: Message, state: FSMContext, session_factory: Sessio
         return
     async with session_factory() as session:
         known = await UserRepository(session).get_profile(user_id) is not None
-    await message.answer(f"{texts.START}\n\n{texts.DISCLAIMER}")
+    await send_greeting(message)
     if known:
-        await message.answer(texts.WELCOME_BACK)
+        await message.answer(texts.WELCOME_BACK, reply_markup=keyboards.main_keyboard())
     else:
         await begin_onboarding(message, state)
 
@@ -186,6 +200,7 @@ async def on_goal(
         fat=round(target.fat_g),
         carb=round(target.carb_g),
     )
+    await message.answer(texts.NAV_HINT, reply_markup=keyboards.main_keyboard())
     await message.answer(
         done + (f"\n\n{note}" if note else ""),
         reply_markup=keyboards.after_onboarding_keyboard(profile.goal),

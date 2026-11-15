@@ -306,6 +306,7 @@ async def _build_and_send(
 def register(router: Router) -> None:
     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
     router.message.register(cmd_menu, Command("menu"))
+    router.message.register(cmd_menu, F.text == texts.BTN_NAV_MENU)
     router.callback_query.register(on_menu_button, F.data == "menu:start")
     router.callback_query.register(on_days, MenuFlow.days, F.data.startswith("days:"))
     router.callback_query.register(

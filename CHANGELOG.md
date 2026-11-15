@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- `/start` greets with the Foxella picture (`src/nutrition_bot/assets/welcome.jpg`); if the picture
+  cannot be sent, the greeting is plain text.
+- A permanent button panel under the input field (menu, shopping list, "not by plan", profile) is
+  set after onboarding and by `/start` for known people, and removed by `/delete_me`. Free-text steps
+  no longer treat the panel labels as answers.
 - The menu is easier to read: a short header card for each day, one message per meal with bold
   titles, an emoji for each food group, bold household measures and the recipe in a folded
   "How to cook" block. Messages are sent as Telegram HTML; dish names and recipes are escaped

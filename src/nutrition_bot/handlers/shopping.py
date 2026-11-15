@@ -81,4 +81,5 @@ async def on_shop_button(
 def register(router: Router) -> None:
     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
     router.message.register(cmd_shopping, Command("shopping"))
+    router.message.register(cmd_shopping, F.text == texts.BTN_NAV_SHOPPING)
     router.callback_query.register(on_shop_button, F.data == "shop:show")
