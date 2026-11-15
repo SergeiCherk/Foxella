@@ -302,6 +302,29 @@ def test_finer_step_is_used_when_half_measures_are_too_coarse() -> None:
     assert fitted[0].items[0].quantity == 0.75
 
 
+def test_quarters_stay_on_glasses_and_spoons_when_that_is_enough() -> None:
+    # Ladle 1, oil 0.5 tbsp, broccoli 1 glass, target 255 kcal. With halves only the meal misses
+    # the window; quarters for the spoon and the glass are enough, so the ladle stays a whole.
+    dish = Dish("Рис с овощами", (DishItem(2, 20, 1), DishItem(6, 23, 0.5), DishItem(5, 22, 1)), "")
+    fitted, _ = fit_portions(CATALOG, [dish], 255, CFG)
+    assert fitted is not None
+    ladle, oil, broccoli = fitted[0].items
+    assert (ladle.quantity, oil.quantity, broccoli.quantity) == (1.0, 0.5, 1.25)
+    # Allowing quarters for ladles too gives the odd "1¼ ladles" this rule avoids.
+    anything = MenuConfig(fine_measures=("стакан", "столовая ложка", "половник"))
+    loose, _ = fit_portions(CATALOG, [dish], 255, anything)
+    assert loose is not None
+    assert loose[0].items[0].quantity == 1.25
+
+
+def test_quarters_for_any_measure_are_the_last_resort() -> None:
+    # One ladle (130 kcal), target 90: half a ladle is 28 % off, three quarters is 8 % off.
+    dish = Dish("Рис", (DishItem(2, 20, 1),), "")
+    fitted, _ = fit_portions(CATALOG, [dish], 90, CFG)
+    assert fitted is not None
+    assert fitted[0].items[0].quantity == 0.75
+
+
 def test_whole_pieces_are_never_fractional() -> None:
     # Target 400 kcal: scale 0.741 -> 1.48 eggs and 2.22 ladles. The rice is rounded to a half
     # (2.0), the eggs to a whole number (1), never to 1.5 or 1.25.

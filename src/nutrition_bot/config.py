@@ -117,6 +117,9 @@ class MenuConfig(BaseModel):
     fallback_min_scale: float = 0.3  # our own fallback dishes may be scaled more freely
     fallback_max_scale: float = 3.0
     quantity_steps: tuple[float, ...] = (0.5, 0.25)  # household quantities are rounded to these
+    # ... but the finer step (a quarter) only for measures where "¼" is natural in speech; a
+    # quarter of a bunch, a pack or a ladle sounds odd, so those stay on whole and half numbers.
+    fine_measures: tuple[str, ...] = ("стакан", "столовая ложка", "чайная ложка")
     # ... except whole-piece measures (eggs, tomatoes, ...), which always use step 1.
     whole_measures: tuple[str, ...] = WHOLE_PIECE_MEASURES
     max_dishes_per_meal: int = 3

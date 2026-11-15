@@ -44,5 +44,6 @@ def test_llm_and_menu_defaults(settings: Settings) -> None:
     assert settings.menu.meal_tolerance == pytest.approx(0.10)
     assert sum(settings.menu.meal_shares.values()) == pytest.approx(1.0)
     assert settings.menu.quantity_steps == (0.5, 0.25)
+    assert settings.menu.fine_measures == ("стакан", "столовая ложка", "чайная ложка")
     assert {"яйцо", "помидор", "банан"} <= set(settings.menu.whole_measures)
     assert settings.shopping.whole_measures == settings.menu.whole_measures

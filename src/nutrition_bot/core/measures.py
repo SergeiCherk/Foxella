@@ -54,9 +54,26 @@ def _check_quantity(quantity: float) -> None:
         raise InvalidQuantityError(quantity)
 
 
-def step_for(measure: Measure, step: float, whole_measures: Collection[str]) -> float:
-    """Rounding step for a measure: 1 for whole pieces (eggs, tomatoes), else the given ``step``."""
-    return 1.0 if measure.name_ru in whole_measures else step
+def step_for(
+    measure: Measure,
+    step: float,
+    whole_measures: Collection[str],
+    *,
+    coarse_step: float | None = None,
+    fine_measures: Collection[str] = (),
+) -> float:
+    """Rounding step for a measure: 1 for whole pieces (eggs, tomatoes), else the given ``step``.
+
+    With ``coarse_step`` set, a ``step`` finer than it is used only for ``fine_measures``
+    (a quarter of a glass or a spoon is natural; a quarter of a bunch or a pack is not); every
+    other measure keeps the coarse step.
+    """
+    name = measure.name_ru
+    if name in whole_measures:
+        return 1.0
+    if coarse_step is not None and step < coarse_step and name not in fine_measures:
+        return coarse_step
+    return step
 
 
 def measure_to_grams(measure: Measure, quantity: float) -> float:

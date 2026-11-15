@@ -279,6 +279,9 @@ def _scale_dish(
     step: float,
     whole_measures: Collection[str],
     free_scale: float | None = None,
+    *,
+    coarse_step: float | None = None,
+    fine_measures: Collection[str] = (),
 ) -> Dish:
     """Scale a dish and round to household steps; whole pieces (eggs, ...) to whole numbers.
 
@@ -287,7 +290,9 @@ def _scale_dish(
     items = []
     for i in dish.items:
         measure = catalog.get_measure(i.food_id, i.measure_id)
-        s = step_for(measure, step, whole_measures)
+        s = step_for(
+            measure, step, whole_measures, coarse_step=coarse_step, fine_measures=fine_measures
+        )
         is_whole = measure.name_ru in whole_measures
         factor = free_scale if free_scale is not None and not is_whole else scale
         items.append(
@@ -335,8 +340,9 @@ def fit_portions(
 ) -> tuple[list[Dish] | None, str]:
     """Scale all quantities by one factor so that the meal hits the kcal target.
 
-    Quantities are rounded to household steps (0.5, then 0.25); whole pieces such as eggs and
-    tomatoes always to whole numbers (at least 1). Because whole pieces cannot flex, the other
+    Quantities are rounded to household steps: halves first, then quarters for glasses and
+    spoons, and quarters for any measure only as a last resort. Whole pieces such as eggs and
+    tomatoes always go to whole numbers (at least 1). Because whole pieces cannot flex, the other
     ingredients are re-scaled to fill the rest of the kcal when the first attempt misses the
     target. Returns ``(dishes, "")`` or ``(None, reason)``. ``wide`` allows larger scale factors
     (for our own fallback dishes).
@@ -354,13 +360,29 @@ def fit_portions(
             "adjust the dishes and portions"
         )
     free_scale = _free_scale(catalog, dishes, scale, target_kcal, cfg.whole_measures)
-    for step in cfg.quantity_steps:
+    coarse = cfg.quantity_steps[0]
+    # Passes, from the most natural wording to the least: halves; quarters for glasses and
+    # spoons only; and only if nothing else fits, quarters for every measure.
+    passes = [(step, True) for step in cfg.quantity_steps]
+    if cfg.quantity_steps[-1] < coarse:
+        passes.append((cfg.quantity_steps[-1], False))
+    for step, keep_coarse in passes:
         attempts: list[float | None] = [None]
         if free_scale is not None and low <= free_scale <= high:
             attempts.append(free_scale)
         for free in attempts:
             fitted = [
-                _scale_dish(catalog, d, scale, step, cfg.whole_measures, free) for d in dishes
+                _scale_dish(
+                    catalog,
+                    d,
+                    scale,
+                    step,
+                    cfg.whole_measures,
+                    free,
+                    coarse_step=coarse if keep_coarse else None,
+                    fine_measures=cfg.fine_measures,
+                )
+                for d in dishes
             ]
             kcal = sum_nutrients(dish_nutrients(catalog, d) for d in fitted).kcal
             if within_tolerance(kcal, target_kcal, cfg.meal_tolerance):

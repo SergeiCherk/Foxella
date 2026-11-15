@@ -15,6 +15,7 @@ from nutrition_bot.core.measures import (
     measure_to_grams,
     nutrients_for_grams,
     nutrients_for_measure,
+    step_for,
 )
 from nutrition_bot.core.models import Food, FoodCategory, FoodState, Measure, Nutrients
 
@@ -144,3 +145,40 @@ def test_nutrients_for_measure_rejects_foreign_measure() -> None:
 def test_macro_energy_roughly_matches_kcal() -> None:
     n = nutrients_for_measure(RICE_COOKED, CUP_COOKED, 3)
     assert 4 * n.protein_g + 4 * n.carb_g + 9 * n.fat_g == pytest.approx(n.kcal, rel=0.05)
+
+
+# ------------------------------------------------------------------ rounding steps
+
+WHOLE = ("яйцо",)
+FINE = ("стакан",)
+
+
+def _measure(name: str) -> Measure:
+    return Measure(1, 1, name, 100.0)
+
+
+@pytest.mark.parametrize(
+    ("name", "step", "expected"),
+    [
+        ("яйцо", 0.25, 1.0),  # whole pieces are always whole
+        ("половник", 0.5, 0.5),
+        ("половник", 0.25, 0.25),  # no coarse step given: the step is used as is
+    ],
+)
+def test_step_for_without_a_coarse_step(name: str, step: float, expected: float) -> None:
+    assert step_for(_measure(name), step, WHOLE) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "step", "expected"),
+    [
+        ("половник", 0.5, 0.5),
+        ("половник", 0.25, 0.5),  # a quarter of a ladle sounds odd: stays on halves
+        ("стакан", 0.25, 0.25),  # but a quarter of a glass is fine
+        ("яйцо", 0.25, 1.0),
+    ],
+)
+def test_step_for_keeps_the_coarse_step_outside_the_fine_measures(
+    name: str, step: float, expected: float
+) -> None:
+    assert step_for(_measure(name), step, WHOLE, coarse_step=0.5, fine_measures=FINE) == expected

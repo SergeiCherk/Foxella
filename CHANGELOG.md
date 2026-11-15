@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Portions sound more natural: a quarter ("1¼") is used only for glasses and spoons; a bunch, a
+  pack or a ladle go in whole and half numbers. If a meal cannot be fitted that way, quarters for
+  any measure are still used as a last resort, so menus are not lost (`MenuConfig.fine_measures`).
 - The target-weight check reads like a conversation: the button asks "За какой срок я дойду до
   цели?" and the answers say plainly whether the pace is safe (the calculation is unchanged).
 - `/start` greets with the Foxella picture (`src/nutrition_bot/assets/welcome.jpg`); if the picture
