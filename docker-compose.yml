@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/storage/nutrition_bot.db
+    volumes:
+      - bot_data:/app/storage
+    restart: unless-stopped
+
+volumes:
+  bot_data:

@@ -1,0 +1,194 @@
+"""Tests for message rendering: declension of measures, blocks, packing."""
+
+import pytest
+
+from nutrition_bot import texts
+from nutrition_bot.config import ShoppingConfig
+from nutrition_bot.core.balance import BalanceHint, HintKind
+from nutrition_bot.core.models import Dish, DishItem, Meal, MealType
+from nutrition_bot.core.shopping import build_shopping_list
+from nutrition_bot.db.seed import catalog_from_rows, load_foods, load_measures
+from nutrition_bot.handlers.render import (
+    format_number,
+    measure_phrase,
+    pack,
+    render_day,
+    render_hints,
+    render_item,
+    render_meal,
+    render_shopping,
+)
+
+CATALOG, IDS = catalog_from_rows(load_foods(), load_measures())
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (1, "1"),
+        (2.0, "2"),
+        (0.5, "½"),
+        (0.25, "¼"),
+        (0.75, "¾"),
+        (1.5, "1½"),
+        (2.25, "2¼"),
+        (0.3, "0,3"),
+        (1.2, "1,2"),
+        (10, "10"),
+    ],
+)
+def test_format_number(value: float, expected: str) -> None:
+    assert format_number(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "quantity", "expected"),
+    [
+        ("половник", 1, "1 половник"),
+        ("половник", 2, "2 половника"),
+        ("половник", 4, "4 половника"),
+        ("половник", 5, "5 половников"),
+        ("половник", 11, "11 половников"),
+        ("половник", 12, "12 половников"),
+        ("половник", 21, "21 половник"),
+        ("половник", 22, "22 половника"),
+        ("половник", 0.5, "½ половника"),
+        ("половник", 1.5, "1½ половника"),
+        ("половник", 0.25, "¼ половника"),
+        ("горсть", 1, "1 горсть"),
+        ("горсть", 2, "2 горсти"),
+        ("горсть", 5, "5 горстей"),
+        ("горсть", 0.5, "½ горсти"),
+        ("столовая ложка", 1, "1 столовая ложка"),
+        ("столовая ложка", 2, "2 столовые ложки"),
+        ("столовая ложка", 5, "5 столовых ложек"),
+        ("столовая ложка", 0.5, "½ столовой ложки"),
+        ("чайная ложка", 3, "3 чайные ложки"),
+        ("стакан", 3, "3 стакана"),
+        ("яйцо", 2, "2 яйца"),
+        ("яйцо", 5, "5 яиц"),
+        ("авокадо", 2, "2 авокадо"),
+    ],
+)
+def test_measure_phrase_agrees_with_the_number(name: str, quantity: float, expected: str) -> None:
+    assert measure_phrase(name, quantity) == expected
+
+
+def test_every_real_measure_can_be_phrased_for_any_quantity() -> None:
+    names = {m.name_ru for m in load_measures()}
+    assert len(names) > 40
+    for name in names:
+        for quantity in (0.25, 0.5, 1, 1.5, 2, 3, 5, 12, 21):
+            phrase = measure_phrase(name, quantity)
+            assert phrase.startswith(format_number(quantity))
+            assert phrase.split(" ", 1)[1].strip()
+            assert not any(ch.isascii() and ch.isalpha() for ch in phrase)
+
+
+def _meal() -> Meal:
+    rice = IDS["rice_white_cooked"]
+    measure = CATALOG.measures_for(rice)[0]
+    dish = Dish("Рис", (DishItem(rice, measure.id, 2.0),), "Сварите рис.")
+    return Meal(MealType.LUNCH, (dish,))
+
+
+def test_item_line_shows_the_food_and_a_measure_not_grams() -> None:
+    meal = _meal()
+    assert render_item(CATALOG, meal.dishes[0].items[0]) == "• Рис белый (варёный) — 2 половника"
+
+
+def test_meal_block_has_title_nutrients_ingredients_and_recipe() -> None:
+    text = render_meal(CATALOG, _meal())
+    assert text.startswith("🍲 Обед: ≈ ")
+    assert "ккал" in text
+    assert "Рис (≈" in text
+    assert "• Рис белый (варёный) — 2 половника" in text
+    assert text.endswith("Как приготовить: Сварите рис.")
+
+
+def test_meal_without_a_recipe_has_no_recipe_line() -> None:
+    meal = _meal()
+    bare = Meal(meal.meal_type, (Dish("Рис", meal.dishes[0].items, ""),))
+    assert texts.RECIPE_LABEL not in render_meal(CATALOG, bare)
+
+
+def test_day_starts_with_a_header_and_numbers_come_from_the_meals() -> None:
+    blocks = render_day(CATALOG, 2, [_meal()])
+    assert blocks[0].startswith("📅 День 2: примерно ")
+    assert len(blocks) == 2
+
+
+def test_hints_are_deduplicated_and_empty_means_no_block() -> None:
+    assert render_hints([]) == ""
+    hint = BalanceHint(HintKind.VEG_FRUIT)
+    block = render_hints([hint, hint, BalanceHint(HintKind.PROTEIN_MEAL, MealType.DINNER)])
+    assert block.count("Овощей и фруктов") == 1
+    assert "В ужин белка" in block
+    assert block.startswith(texts.HINTS_TITLE)
+
+
+def test_shopping_blocks_are_grouped_by_category() -> None:
+    rice = IDS["rice_white_cooked"]
+    egg = IDS["egg_boiled"]
+    meals = [
+        Meal(
+            MealType.LUNCH,
+            (
+                Dish(
+                    "d",
+                    (
+                        DishItem(rice, CATALOG.measures_for(rice)[0].id, 3.0),
+                        DishItem(egg, CATALOG.measures_for(egg)[0].id, 2.0),
+                    ),
+                ),
+            ),
+        )
+    ]
+    items = build_shopping_list(CATALOG, [meals], ShoppingConfig())
+    blocks = render_shopping(items, 1)
+    assert blocks[0].startswith("🛒 Список покупок на 1 день")
+    assert any(b.startswith("Яйца\n• ") for b in blocks)
+    assert any(b.startswith("Крупы и макароны\n• Рис белый (сухой) — ") for b in blocks)
+
+
+def test_item_without_a_measure_is_listed_without_an_amount() -> None:
+    from nutrition_bot.core.shopping import ShoppingItem
+
+    food = CATALOG.get_food(IDS["rice_white_raw"])
+    blocks = render_shopping([ShoppingItem(food, 50.0, None, 0.0)], 3)
+    assert f"• {food.name_ru} — {texts.SHOPPING_NO_AMOUNT}" in blocks[1]
+    assert blocks[0].endswith("на 3 дня (то, что уже есть дома, я не включала)")
+
+
+def test_pack_respects_the_limit_and_keeps_order() -> None:
+    blocks = ["a" * 40, "b" * 40, "c" * 40]
+    assert pack(blocks, limit=100) == ["a" * 40 + "\n\n" + "b" * 40, "c" * 40]
+    assert pack([], limit=100) == []
+    assert pack(["x" * 500], limit=100) == ["x" * 100]
+    assert all(len(m) <= 100 for m in pack(["y" * 30] * 20, limit=100))
+
+
+def test_staples_are_listed_in_their_own_block_at_the_end() -> None:
+    from nutrition_bot.core.shopping import ShoppingItem
+
+    rice = CATALOG.get_food(IDS["rice_white_raw"])
+    oil = CATALOG.get_food(IDS["sunflower_oil"])
+    tbsp = next(m for m in CATALOG.measures_for(oil.id) if m.name_ru == "столовая ложка")
+    cup = next(m for m in CATALOG.measures_for(rice.id) if m.name_ru == "стакан")
+    items = [
+        ShoppingItem(rice, 190.0, cup, 1.0),
+        ShoppingItem(oil, 14.0, tbsp, 1.0, is_staple=True),
+    ]
+    blocks = render_shopping(items, 1)
+    assert blocks[-1].startswith(texts.SHOPPING_STAPLES_TITLE)
+    assert f"• {oil.name_ru} — " in blocks[-1]
+    assert not any(oil.name_ru in b for b in blocks[:-1])  # not repeated under its category
+    assert any(b.startswith("Крупы и макароны\n• ") for b in blocks)
+
+
+def test_without_staples_there_is_no_staple_block() -> None:
+    from nutrition_bot.core.shopping import ShoppingItem
+
+    rice = CATALOG.get_food(IDS["rice_white_raw"])
+    blocks = render_shopping([ShoppingItem(rice, 50.0, None, 0.0)], 1)
+    assert not any(b.startswith(texts.SHOPPING_STAPLES_TITLE) for b in blocks)
