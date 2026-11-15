@@ -1,0 +1,153 @@
+food_code,name_ru,grams
+rice_white_raw,стакан,190
+rice_white_cooked,половник,100
+rice_white_cooked,стакан,165
+rice_brown_raw,стакан,200
+rice_brown_cooked,половник,100
+rice_brown_cooked,стакан,165
+buckwheat_raw,стакан,170
+buckwheat_cooked,половник,100
+buckwheat_cooked,стакан,175
+oat_flakes_dry,стакан,85
+oat_flakes_dry,горсть,35
+oatmeal_cooked,половник,150
+oatmeal_cooked,тарелка,250
+millet_raw,стакан,210
+millet_cooked,половник,100
+millet_cooked,стакан,185
+pasta_raw,стакан,110
+pasta_raw,горсть,35
+pasta_cooked,половник,100
+pasta_cooked,стакан,145
+bulgur_raw,стакан,150
+bulgur_cooked,половник,100
+bulgur_cooked,стакан,195
+potato_raw,картофелина,120
+potato_boiled,картофелина,120
+sweet_potato_raw,клубень,150
+sweet_potato_baked,клубень,135
+chicken_breast_raw,грудка,200
+chicken_breast_cooked,грудка,150
+chicken_thigh_raw,бедро,110
+chicken_thigh_cooked,бедро,80
+turkey_breast_raw,кусок,150
+turkey_breast_cooked,кусок,110
+beef_lean_raw,кусок,150
+beef_lean_cooked,кусок,100
+pork_lean_raw,кусок,150
+pork_lean_cooked,кусок,105
+minced_mixed_raw,котлета,90
+minced_mixed_cooked,котлета,70
+doctor_sausage,ломтик,20
+sausages_boiled,сосиска,50
+salmon_raw,стейк,150
+salmon_cooked,стейк,125
+cod_raw,филе,150
+cod_cooked,филе,120
+pollock_raw,филе,150
+pollock_cooked,филе,120
+tuna_canned,банка,120
+tuna_canned,столовая ложка,20
+shrimp_boiled,горсть,60
+egg_raw,яйцо,50
+egg_boiled,яйцо,50
+milk_2_5,стакан,250
+milk_2_5,столовая ложка,15
+milk_3_2,стакан,250
+kefir_1,стакан,250
+kefir_2_5,стакан,250
+yogurt_natural,стакан,250
+yogurt_natural,баночка,125
+greek_yogurt,баночка,150
+greek_yogurt,столовая ложка,25
+cottage_0,столовая ложка,30
+cottage_0,пачка,180
+cottage_5,столовая ложка,30
+cottage_5,пачка,180
+cottage_9,столовая ложка,30
+cottage_9,пачка,180
+sour_cream_15,столовая ложка,25
+sour_cream_15,чайная ложка,10
+sour_cream_20,столовая ложка,25
+sour_cream_20,чайная ложка,10
+cheese_hard,ломтик,20
+cheese_hard,кусочек,30
+mozzarella,ломтик,20
+mozzarella,шарик,125
+feta,кусочек,30
+butter,чайная ложка,5
+butter,столовая ложка,14
+butter,кусочек,10
+sunflower_oil,чайная ложка,5
+sunflower_oil,столовая ложка,14
+olive_oil,чайная ложка,5
+olive_oil,столовая ложка,14
+cucumber,огурец,120
+tomato,помидор,120
+cabbage_white,стакан,75
+carrot,морковь,80
+onion,луковица,80
+bell_pepper,перец,150
+broccoli,стакан,95
+cauliflower,стакан,110
+zucchini,кабачок,250
+eggplant,баклажан,250
+beet,свёкла,150
+spinach,горсть,30
+lettuce,горсть,30
+garlic,зубчик,4
+pumpkin,кусок,150
+mushrooms_champignon,шампиньон,20
+greens_herbs,пучок,30
+beans_canned,столовая ложка,20
+beans_canned,банка,240
+apple,яблоко,170
+banana,банан,120
+orange,апельсин,150
+mandarin,мандарин,70
+pear,груша,170
+grapes,горсть,80
+kiwi,киви,70
+strawberry,горсть,80
+avocado,половинка,70
+avocado,авокадо,140
+lemon,ломтик,6
+peach,персик,150
+watermelon,кусок,250
+dried_apricots,штука,8
+dried_apricots,горсть,30
+raisins,горсть,30
+lentils_raw,стакан,200
+lentils_cooked,половник,120
+lentils_cooked,стакан,210
+chickpeas_raw,стакан,210
+chickpeas_cooked,половник,120
+chickpeas_cooked,стакан,175
+white_beans_raw,стакан,190
+white_beans_cooked,половник,120
+white_beans_cooked,стакан,190
+walnuts,горсть,30
+almonds,горсть,30
+peanuts,горсть,30
+hazelnuts,горсть,30
+cashew,горсть,30
+sunflower_seeds,горсть,30
+sunflower_seeds,столовая ложка,10
+chia_seeds,столовая ложка,12
+flax_seeds,столовая ложка,10
+peanut_butter,столовая ложка,16
+bread_rye,ломтик,32
+bread_white,ломтик,28
+bread_wholegrain,ломтик,30
+pita,лепёшка,60
+honey,чайная ложка,7
+honey,столовая ложка,21
+sugar,чайная ложка,5
+sugar,столовая ложка,15
+dark_chocolate,долька,5
+dark_chocolate,плитка,100
+mayonnaise,столовая ложка,20
+mayonnaise,чайная ложка,7
+soy_sauce,столовая ложка,15
+soy_sauce,чайная ложка,5
+tofu,кусок,100
