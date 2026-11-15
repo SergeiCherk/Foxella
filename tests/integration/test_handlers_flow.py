@@ -155,7 +155,7 @@ async def test_menu_calories_are_computed_by_code_and_close_to_the_norm(
     await app.onboard()
     text = joined(await make_menu(app))
     target = calculate_daily_norm(PROFILE, settings.norms).target.kcal
-    shown = int(re.search(r"День 1: примерно (\d+) ккал", text).group(1))  # type: ignore[union-attr]
+    shown = int(re.search(r"День 1</b>\n🔥 (\d+) ккал", text).group(1))  # type: ignore[union-attr]
     assert abs(shown - target) / target < 0.12
 
 
@@ -330,7 +330,7 @@ async def test_tiny_excess_changes_nothing(app: BotHarness) -> None:
 
 
 async def day_kcal(replies: list[Reply]) -> int:
-    match = re.search(r"День 1: примерно (\d+) ккал", joined(replies))
+    match = re.search(r"День 1</b>\n🔥 (\d+) ккал", joined(replies))
     assert match is not None
     return int(match.group(1))
 

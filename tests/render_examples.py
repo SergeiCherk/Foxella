@@ -8,6 +8,8 @@ texts, food data or norms, and the examples stay true.
 """
 
 import asyncio
+import html
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +17,16 @@ from pathlib import Path
 from nutrition_bot.config import Settings
 from tests.integration.app_builder import bot_app
 from tests.integration.bot_harness import BotHarness, Reply
+
+
+def html_to_markdown(text: str) -> str:
+    """Show the bot's Telegram HTML as markdown: bold, italic and the folded recipe."""
+    text = re.sub(r"</?b>", "**", text)
+    text = re.sub(r"</?i>", "*", text)
+    text = re.sub(r"<blockquote expandable>", "▾ ", text)
+    text = text.replace("</blockquote>", "")
+    return html.unescape(text)
+
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples"
 HEADER = (
@@ -38,7 +50,9 @@ class Transcript:
 
     def _show(self, replies: list[Reply]) -> None:
         for reply in replies:
-            quoted = "\n".join(f"> {line}" if line else ">" for line in reply.text.splitlines())
+            quoted = "\n".join(
+                f"> {line}" if line else ">" for line in html_to_markdown(reply.text).splitlines()
+            )
             self.lines += [f"**Бот:**\n{quoted}", ""]
             self.labels.update(zip(reply.buttons, reply.button_labels, strict=False))
             if reply.button_labels:

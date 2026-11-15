@@ -6,6 +6,7 @@ import math
 from typing import Any
 
 from aiogram import F, Router
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -38,7 +39,7 @@ from nutrition_bot.handlers.common import (
 )
 from nutrition_bot.handlers.guard import MenuGuard
 from nutrition_bot.handlers.onboarding import NOT_A_COMMAND
-from nutrition_bot.handlers.render import pack, render_day, render_hints
+from nutrition_bot.handlers.render import html_text, render_day, render_hints
 from nutrition_bot.handlers.states import MenuFlow
 from nutrition_bot.services.food_parser import FoodParser
 
@@ -277,10 +278,10 @@ async def _build_and_send(
         await repo.save_menu(user_id, menu)
         await repo.set_adjustments(user_id, [])
 
-    blocks: list[str] = []
+    messages: list[str] = []
     hints: list[BalanceHint] = []
     for number, meals in enumerate(menu, start=1):
-        blocks += render_day(catalog, number, meals)
+        messages += render_day(catalog, number, meals)
         hints += analyze_day(catalog, meals, norm.target, settings.balance)
     if pantry:
         hints += pantry_hints(catalog, pantry, settings.balance)
@@ -290,11 +291,15 @@ async def _build_and_send(
     if any(r.source is MealSource.FALLBACK for day in results for r in day):
         logger.info("some meals came from the built-in dishes")
     hint_block = render_hints(hints)
-    blocks += ([hint_block] if hint_block else []) + notes
-    messages = pack(blocks)
-    for text in messages[:-1]:
-        await message.answer(text)
-    await message.answer(messages[-1], reply_markup=keyboards.after_menu_keyboard())
+    closing = [html_text(hint_block)] if hint_block else []
+    closing += [f"<i>{html_text(note)}</i>" for note in notes]
+    for text in messages:
+        await message.answer(text, parse_mode=ParseMode.HTML)
+    await message.answer(
+        "\n\n".join(closing),
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboards.after_menu_keyboard(),
+    )
     await track(session_factory, user_id, EventName.MENU_RECEIVED)
 
 

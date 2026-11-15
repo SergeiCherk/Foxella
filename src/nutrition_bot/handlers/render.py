@@ -6,6 +6,7 @@ appear. Nutrients shown to the user are the ones computed by code.
 
 from collections.abc import Iterable, Sequence
 from functools import lru_cache
+from html import escape
 
 import pymorphy3
 from pymorphy3.analyzer import Parse
@@ -20,6 +21,7 @@ from nutrition_bot.core.shopping import ShoppingItem
 TELEGRAM_LIMIT = 4000  # a message may hold 4096 characters; keep a margin
 _FRACTIONS = {0.25: "¼", 0.5: "½", 0.75: "¾"}
 _FEW = {2, 3, 4}
+MAX_RECIPE_CHARS = 700  # a recipe longer than this is cut, so one meal always fits a message
 
 
 @lru_cache(maxsize=1)
@@ -86,8 +88,29 @@ def render_item(catalog: Catalog, item: DishItem) -> str:
     return f"• {food.name_ru} — {measure_phrase(measure.name_ru, item.quantity)}"
 
 
+def html_text(value: str) -> str:
+    """Escape text for Telegram HTML (names and recipes may come from the language model)."""
+    return escape(value, quote=False)
+
+
+def shorten(text: str, limit: int = MAX_RECIPE_CHARS) -> str:
+    """Cut ``text`` at a word boundary and add an ellipsis if it is longer than ``limit``."""
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:.") + "…"
+
+
+def render_item_html(catalog: Catalog, item: DishItem) -> str:
+    """One ingredient: ``🌾 Рис белый (варёный) — <b>2 половника</b>``."""
+    food = catalog.get_food(item.food_id)
+    measure = catalog.get_measure(item.food_id, item.measure_id)
+    icon = texts.CATEGORY_ICONS.get(food.category, "•")
+    amount = measure_phrase(measure.name_ru, item.quantity)
+    return f"{icon} {html_text(food.name_ru)} — <b>{html_text(amount)}</b>"
+
+
 def render_meal(catalog: Catalog, meal: Meal) -> str:
-    """A meal block: title with code-computed nutrients, dishes, ingredients and recipes."""
+    """One meal as a Telegram HTML message: title, dishes with ingredients, folded recipes."""
     kcal, protein, fat, carb = _kcal_line(meal_nutrients(catalog, meal))
     lines = [
         texts.MEAL_LINE.format(
@@ -99,12 +122,16 @@ def render_meal(catalog: Catalog, meal: Meal) -> str:
             carb=carb,
         )
     ]
+    several = len(meal.dishes) > 1
     for dish in meal.dishes:
-        dish_kcal = round(dish_nutrients(catalog, dish).kcal)
-        lines.append(f"\n{dish.name} (≈ {dish_kcal} ккал)")
-        lines.extend(render_item(catalog, item) for item in dish.items)
+        title = f"<b>{html_text(dish.name)}</b>"
+        if several:
+            title += f" (≈ {round(dish_nutrients(catalog, dish).kcal)} ккал)"
+        lines += ["", title]
+        lines.extend(render_item_html(catalog, item) for item in dish.items)
         if dish.recipe_text:
-            lines.append(texts.RECIPE_LABEL + dish.recipe_text)
+            recipe = html_text(shorten(dish.recipe_text))
+            lines += ["", f"<blockquote expandable>{texts.RECIPE_LABEL}{recipe}</blockquote>"]
     return "\n".join(lines)
 
 

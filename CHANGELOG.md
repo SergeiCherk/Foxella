@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The menu is easier to read: a short header card for each day, one message per meal with bold
+  titles, an emoji for each food group, bold household measures and the recipe in a folded
+  "How to cook" block. Messages are sent as Telegram HTML; dish names and recipes are escaped
+  and long recipes are cut at a word boundary (`handlers/render.py`).
+- The greeting now introduces the bot as Foxella.
+
 ### Added
 - Usage events for the beta (stage 8): "onboarding done", "menu received" and "slip started" are
   stored in the new `user_events` table (migration `0003`) as a fixed name and a time, with no

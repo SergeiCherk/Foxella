@@ -153,12 +153,28 @@ MENU_EXTRA_NOTE = (
 )
 MENU_MEASURE_NOTE = "Порции указаны в бытовых мерах, граммы считать не нужно."
 MENU_EMPTY = "У меня не получилось собрать меню. Попробуй ещё раз через минуту: /menu"
-DAY_TITLE = (
-    "📅 День {n}: примерно {kcal} ккал (белки {protein} г · жиры {fat} г · углеводы {carb} г)"
-)
-MEAL_LINE = "{icon} {title}: ≈ {kcal} ккал (Б {protein} · Ж {fat} · У {carb})"
-RECIPE_LABEL = "Как приготовить: "
+# Menu messages are sent with Telegram HTML (<b>, <i>, <blockquote>); dynamic parts are escaped.
+DAY_TITLE = "📅 <b>День {n}</b>\n🔥 {kcal} ккал · 🥩 Б {protein} · 🥑 Ж {fat} · 🍚 У {carb}"
+MEAL_LINE = "{icon} <b>{title}</b> · ≈ {kcal} ккал\n<i>Б {protein} · Ж {fat} · У {carb}</i>"
+RECIPE_LABEL = "👩‍🍳 <b>Как приготовить</b>\n"
 HINTS_TITLE = "💡 Чего может не хватать:"
+CATEGORY_ICONS: dict[FoodCategory, str] = {
+    FoodCategory.GRAIN: "🌾",
+    FoodCategory.STARCH: "🥔",
+    FoodCategory.MEAT: "🍗",
+    FoodCategory.FISH: "🐟",
+    FoodCategory.EGG: "🥚",
+    FoodCategory.DAIRY: "🥛",
+    FoodCategory.VEGETABLE: "🥬",
+    FoodCategory.FRUIT: "🍎",
+    FoodCategory.LEGUME: "🫘",
+    FoodCategory.NUT: "🥜",
+    FoodCategory.FAT: "🫒",
+    FoodCategory.BREAD: "🍞",
+    FoodCategory.SWEET: "🍯",
+    FoodCategory.SAUCE: "🥫",
+    FoodCategory.OTHER: "🍽",
+}
 MEAL_TITLES: dict[MealType, str] = {
     MealType.BREAKFAST: "Завтрак",
     MealType.LUNCH: "Обед",
