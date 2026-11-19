@@ -15,6 +15,7 @@ from nutrition_bot.db.repositories.users import UserRepository
 from nutrition_bot.handlers import keyboards
 from nutrition_bot.handlers.common import callback_message, low_kcal_note, sender_id
 from nutrition_bot.handlers.onboarding import begin_onboarding
+from nutrition_bot.handlers.render import plural
 
 logger = logging.getLogger(__name__)
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -34,12 +35,12 @@ async def show_profile(
     note = low_kcal_note(profile, norm.kcal, settings)
     await target.answer(
         texts.PROFILE_VIEW.format(
-            sex=texts.SEX_LABELS[profile.sex],
-            age=profile.age,
+            sex=texts.SEX_NAMES[profile.sex],
+            age=plural(profile.age, texts.YEARS_FORMS),
             height=f"{profile.height_cm:g}".replace(".", ","),
             weight=weight,
-            activity=texts.ACTIVITY_LABELS[profile.activity],
-            goal=texts.GOAL_LABELS[profile.goal],
+            activity=texts.ACTIVITY_NAMES[profile.activity],
+            goal=texts.GOAL_NAMES[profile.goal],
             kcal=round(norm.kcal),
             protein=round(norm.protein_g),
             fat=round(norm.fat_g),

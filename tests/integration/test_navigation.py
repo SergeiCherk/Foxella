@@ -55,7 +55,7 @@ async def test_onboarding_sets_the_panel_just_before_the_result(app: BotHarness)
     hint = next(m for m in sent if m.text == texts.NAV_HINT)
     assert isinstance(hint.reply_markup, ReplyKeyboardMarkup)
     assert [b.text for row in hint.reply_markup.keyboard for b in row] == list(texts.NAV_LABELS)
-    assert sent[-1].text.startswith("Готово")  # the result with its own buttons comes last
+    assert "Готово!" in sent[-1].text  # the result with its own buttons comes last
     assert sent.index(hint) == len(sent) - 2
 
 

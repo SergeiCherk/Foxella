@@ -230,7 +230,7 @@ async def test_menu_calories_are_computed_by_code_and_close_to_the_norm(
     await app.onboard()
     text = joined(await make_menu(app))
     target = calculate_daily_norm(PROFILE, settings.norms).target.kcal
-    shown = int(re.search(r"День 1</b>\n🔥 (\d+) ккал", text).group(1))  # type: ignore[union-attr]
+    shown = int(re.search(r"День 1</b>\n🔥 <b>(\d+) ккал", text).group(1))  # type: ignore[union-attr]
     assert abs(shown - target) / target < 0.12
 
 
@@ -405,7 +405,7 @@ async def test_tiny_excess_changes_nothing(app: BotHarness) -> None:
 
 
 async def day_kcal(replies: list[Reply]) -> int:
-    match = re.search(r"День 1</b>\n🔥 (\d+) ккал", joined(replies))
+    match = re.search(r"День 1</b>\n🔥 <b>(\d+) ккал", joined(replies))
     assert match is not None
     return int(match.group(1))
 
@@ -659,3 +659,37 @@ async def test_a_failing_statistics_write_does_not_break_the_bot(
     assert slip[-1].text == texts.SLIP_ASK
     assert await stored_profile(app) == PROFILE
     assert "could not record the onboarding_done event" in caplog.text
+
+
+# ---- whatever a person types is escaped: the harness fails on any invalid Telegram HTML
+
+
+async def test_typed_html_in_products_is_shown_escaped(app: BotHarness) -> None:
+    await app.onboard()
+    await app.say("/menu")
+    await app.press("days:1")
+    replies = await app.say("гречка, <b>пицца</b> & кола")
+    assert "&lt;b&gt;пицца&lt;/b&gt; &amp; кола" in replies[0].text
+    assert "День 1" in joined(replies)
+
+
+async def test_typed_html_in_a_clarifying_question_is_escaped(app: BotHarness) -> None:
+    await app.onboard()
+    await app.say("/slip")
+    replies = await app.say("творог <3")
+    assert "«<b>творог &lt;3</b>»" in replies[-1].text
+    assert "spick:skip" in replies[-1].buttons
+
+
+async def test_typed_html_in_slip_is_escaped(app: BotHarness) -> None:
+    await app.onboard()
+    await app.say("/slip")
+    replies = await app.say("банан, <script>")
+    assert "&lt;script&gt;" in replies[0].text
+
+
+async def test_profile_shows_age_with_the_right_word(app: BotHarness) -> None:
+    await app.onboard()  # 32 years
+    text = (await app.say("/profile"))[-1].text
+    assert "Возраст: <b>32 года</b>" in text
+    assert "Цель: <b>похудеть</b>" in text

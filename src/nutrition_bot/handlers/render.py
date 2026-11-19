@@ -77,6 +77,19 @@ def measure_phrase(name: str, quantity: float) -> str:
     return f"{number} {' '.join(parts)}"
 
 
+def plural(count: int, forms: tuple[str, str, str]) -> str:
+    """ "32", ("год", "года", "лет") -> "32 года"."""
+    if count % 100 in range(11, 15):
+        word = forms[2]
+    elif count % 10 == 1:
+        word = forms[0]
+    elif count % 10 in _FEW:
+        word = forms[1]
+    else:
+        word = forms[2]
+    return f"{count} {word}"
+
+
 def _kcal_line(n: Nutrients) -> tuple[int, int, int, int]:
     return round(n.kcal), round(n.protein_g), round(n.fat_g), round(n.carb_g)
 
@@ -126,7 +139,7 @@ def render_meal(catalog: Catalog, meal: Meal) -> str:
     for dish in meal.dishes:
         title = f"<b>{html_text(dish.name)}</b>"
         if several:
-            title += f" (≈ {round(dish_nutrients(catalog, dish).kcal)} ккал)"
+            title += texts.DISH_KCAL.format(kcal=round(dish_nutrients(catalog, dish).kcal))
         lines += ["", title]
         lines.extend(render_item_html(catalog, item) for item in dish.items)
         if dish.recipe_text:
@@ -143,18 +156,18 @@ def render_day(catalog: Catalog, number: int, meals: Sequence[Meal]) -> list[str
 
 
 def render_hints(hints: Iterable[BalanceHint]) -> str:
-    """The "what is missing" block; duplicates are shown once. Empty string if nothing to say."""
+    """The "what is missing" block (HTML); duplicates once. Empty string if nothing to say."""
     lines: list[str] = []
     for hint in hints:
         meal = texts.MEAL_IN[hint.meal_type] if hint.meal_type else ""
-        line = "• " + texts.HINT_TEXTS[hint.kind].format(meal=meal)
+        line = "• " + html_text(texts.HINT_TEXTS[hint.kind].format(meal=meal))
         if line not in lines:
             lines.append(line)
     return f"{texts.HINTS_TITLE}\n" + "\n".join(lines) if lines else ""
 
 
 def render_shopping(items: Sequence[ShoppingItem], days: int) -> list[str]:
-    """Shopping list grouped by category, as message blocks (title first)."""
+    """Shopping list grouped by category, as HTML message blocks (title first)."""
     blocks = [texts.SHOPPING_HEADER.format(days=texts.DAYS_ACCUSATIVE.get(days, f"{days} дн."))]
     by_category: dict[FoodCategory, list[str]] = {}
     staples: list[str] = []
@@ -164,13 +177,15 @@ def render_shopping(items: Sequence[ShoppingItem], days: int) -> list[str]:
             if item.measure is None
             else measure_phrase(item.measure.name_ru, item.quantity)
         )
-        line = f"• {item.food.name_ru} — {amount}"
+        line = f"• {html_text(item.food.name_ru)} — <b>{html_text(amount)}</b>"
         if item.is_staple:
             staples.append(line)
         else:
             by_category.setdefault(item.food.category, []).append(line)
     for category, lines in by_category.items():
-        blocks.append(f"{texts.SHOPPING_TITLES[category]}\n" + "\n".join(lines))
+        icon = texts.CATEGORY_ICONS.get(category, "•")
+        title = f"{icon} <b>{texts.SHOPPING_TITLES[category]}</b>"
+        blocks.append(f"{title}\n" + "\n".join(lines))
     if staples:
         blocks.append(texts.SHOPPING_STAPLES_TITLE + "\n" + "\n".join(staples))
     return blocks

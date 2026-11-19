@@ -64,7 +64,7 @@ def after_onboarding_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
 
 def weeks_keyboard(options: Sequence[int]) -> InlineKeyboardMarkup:
     """Typical terms for the target weight check."""
-    return _build([[(f"{n} нед.", f"weeks:{n}") for n in options]])
+    return _build([[(texts.WEEKS_LABEL.format(n=n), f"weeks:{n}") for n in options]])
 
 
 def days_keyboard(options: Sequence[int]) -> InlineKeyboardMarkup:

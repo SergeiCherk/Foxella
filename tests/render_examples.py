@@ -24,7 +24,7 @@ def html_to_markdown(text: str) -> str:
     text = re.sub(r"</?b>", "**", text)
     text = re.sub(r"</?i>", "*", text)
     text = re.sub(r"<blockquote expandable>", "▾ ", text)
-    text = text.replace("</blockquote>", "")
+    text = text.replace("<blockquote>", "│ ").replace("</blockquote>", "")
     return html.unescape(text)
 
 

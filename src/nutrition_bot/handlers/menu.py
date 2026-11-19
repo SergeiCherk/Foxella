@@ -6,7 +6,6 @@ import math
 from typing import Any
 
 from aiogram import F, Router
-from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -149,7 +148,9 @@ async def on_products_text(
         return
     result = parser.parse(message.text or "")
     if result.unknown:
-        await message.answer(texts.MENU_UNKNOWN_NOTE.format(items=", ".join(result.unknown)))
+        await message.answer(
+            texts.MENU_UNKNOWN_NOTE.format(items=html_text(", ".join(result.unknown)))
+        )
     sure, questions = split_parse(result)
     if not sure and not questions:
         await message.answer(texts.MENU_PRODUCTS_AGAIN)
@@ -203,7 +204,7 @@ async def _next(
     await state.set_state(MenuFlow.clarify)
     question = questions[0]
     await message.answer(
-        texts.MENU_CLARIFY.format(text=question["text"]),
+        texts.MENU_CLARIFY.format(text=html_text(question["text"])),
         reply_markup=keyboards.clarify_keyboard(
             "pick", options_of(catalog, question), texts.MENU_CLARIFY_SKIP
         ),
@@ -291,15 +292,12 @@ async def _build_and_send(
     if any(r.source is MealSource.FALLBACK for day in results for r in day):
         logger.info("some meals came from the built-in dishes")
     hint_block = render_hints(hints)
-    closing = [html_text(hint_block)] if hint_block else []
-    closing += [f"<i>{html_text(note)}</i>" for note in notes]
+    closing = [hint_block] if hint_block else []
+    closing += [f"<i>{note}</i>" for note in notes]
+    closing.append(texts.MENU_DONE)
     for text in messages:
-        await message.answer(text, parse_mode=ParseMode.HTML)
-    await message.answer(
-        "\n\n".join(closing),
-        parse_mode=ParseMode.HTML,
-        reply_markup=keyboards.after_menu_keyboard(),
-    )
+        await message.answer(text)
+    await message.answer("\n\n".join(closing), reply_markup=keyboards.after_menu_keyboard())
     await track(session_factory, user_id, EventName.MENU_RECEIVED)
 
 

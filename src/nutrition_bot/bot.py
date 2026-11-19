@@ -3,8 +3,11 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 from alembic import command
@@ -48,6 +51,15 @@ def build_dispatcher(
     return dispatcher
 
 
+def create_bot(token: str, session: Any = None) -> Bot:
+    """The Telegram bot. Every message is Telegram HTML: texts use <b>, <i> and <blockquote>,
+    and anything a person typed or a language model wrote is escaped before it is inserted."""
+    default = DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True)
+    if session is None:
+        return Bot(token=token, default=default)
+    return Bot(token=token, default=default, session=session)
+
+
 def migrate(root: Path = PROJECT_ROOT) -> None:
     """Bring the database schema to the latest version (blocking; run it in a thread)."""
     cfg = Config(str(root / "alembic.ini"), attributes={"configure_logger": False})
@@ -70,7 +82,7 @@ async def run(settings: Settings) -> None:
         aliases = await repo.load_aliases()
     parser = FoodParser(aliases, settings.parser)
     llm = build_llm(settings, catalog)
-    bot = Bot(token=token)
+    bot = create_bot(token)
     dispatcher = build_dispatcher(settings, session_factory, catalog, llm, parser)
     try:
         # Inside the try block: if Telegram is unreachable here, the session is still closed.

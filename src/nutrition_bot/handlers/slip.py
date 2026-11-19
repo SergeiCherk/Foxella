@@ -29,7 +29,7 @@ from nutrition_bot.handlers.common import (
     track,
 )
 from nutrition_bot.handlers.onboarding import NOT_A_COMMAND
-from nutrition_bot.handlers.render import render_item
+from nutrition_bot.handlers.render import html_text, render_item_html
 from nutrition_bot.handlers.states import SlipFlow
 from nutrition_bot.services.food_parser import FoodParser, choose_measure
 
@@ -93,7 +93,7 @@ async def on_slip_text(
     """Free text of what was eaten."""
     result = parser.parse(message.text or "")
     if result.unknown:
-        await message.answer(texts.SLIP_UNKNOWN.format(items=", ".join(result.unknown)))
+        await message.answer(texts.SLIP_UNKNOWN.format(items=html_text(", ".join(result.unknown))))
     sure, questions = split_parse(result)
     if not sure and not questions:
         await message.answer(texts.SLIP_NOTHING, reply_markup=keyboards.slip_quick_keyboard())
@@ -125,7 +125,7 @@ async def _next(message: Message, state: FSMContext, catalog: Catalog) -> None:
     if questions:
         await state.set_state(SlipFlow.clarify)
         await message.answer(
-            texts.MENU_CLARIFY.format(text=questions[0]["text"]),
+            texts.MENU_CLARIFY.format(text=html_text(questions[0]["text"])),
             reply_markup=keyboards.clarify_keyboard(
                 "spick", options_of(catalog, questions[0]), texts.MENU_CLARIFY_SKIP
             ),
@@ -141,7 +141,7 @@ async def _next(message: Message, state: FSMContext, catalog: Catalog) -> None:
     await state.set_state(SlipFlow.confirm)
     await message.answer(
         texts.SLIP_CONFIRM.format(
-            lines="\n".join(render_item(catalog, i) for i in items), kcal=round(kcal)
+            lines="\n".join(render_item_html(catalog, i) for i in items), kcal=round(kcal)
         ),
         reply_markup=keyboards.slip_confirm_keyboard(),
     )
@@ -221,9 +221,12 @@ async def _apply(
     text = texts.SLIP_TEXTS[result.outcome].format(
         excess_kcal=round(result.excess_kcal), per_day_kcal=round(result.average_cut_kcal)
     )
-    if result.adjustments:
-        text += f"\n\n{texts.SLIP_NEXT_MENU}"
-    await message.answer(text)
+    if not result.adjustments:
+        await message.answer(text)
+        return
+    await message.answer(
+        f"{text}\n\n{texts.SLIP_NEXT_MENU}", reply_markup=keyboards.after_onboarding_keyboard()
+    )
 
 
 def register(router: Router) -> None:

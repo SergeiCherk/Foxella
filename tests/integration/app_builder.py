@@ -4,9 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from aiogram import Bot
-
-from nutrition_bot.bot import build_dispatcher
+from nutrition_bot.bot import build_dispatcher, create_bot
 from nutrition_bot.config import Settings
 from nutrition_bot.core.menu import DishGenerator
 from nutrition_bot.db.models import Base
@@ -49,7 +47,7 @@ async def bot_app(
             FoodParser(aliases, settings.parser),
             guard=guard or MenuGuard(0.0),
         )
-        bot = Bot("123456:TEST-TOKEN", session=MockedSession())
+        bot = create_bot("123456:TEST-TOKEN", session=MockedSession())
         yield BotHarness(dispatcher, bot, session_factory, catalog)
     finally:
         await engine.dispose()

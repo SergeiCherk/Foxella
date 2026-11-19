@@ -125,7 +125,7 @@ def test_dish_kcal_is_shown_only_when_a_meal_has_several_dishes() -> None:
     meal = _meal()
     second = Dish("Салат", meal.dishes[0].items, "")
     text = render_meal(CATALOG, Meal(meal.meal_type, (meal.dishes[0], second)))
-    assert text.count("(≈") == 2
+    assert text.count("<i>· ≈") == 2
 
 
 def test_names_and_recipes_are_escaped_for_html() -> None:
@@ -187,9 +187,9 @@ def test_shopping_blocks_are_grouped_by_category() -> None:
     ]
     items = build_shopping_list(CATALOG, [meals], ShoppingConfig())
     blocks = render_shopping(items, 1)
-    assert blocks[0].startswith("🛒 Список покупок на 1 день")
-    assert any(b.startswith("Яйца\n• ") for b in blocks)
-    assert any(b.startswith("Крупы и макароны\n• Рис белый (сухой) — ") for b in blocks)
+    assert blocks[0].startswith("🛒 <b>Список покупок на 1 день</b>")
+    assert any(b.startswith("🥚 <b>Яйца</b>\n• ") for b in blocks)
+    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n• Рис белый (сухой) — ") for b in blocks)
 
 
 def test_item_without_a_measure_is_listed_without_an_amount() -> None:
@@ -197,8 +197,9 @@ def test_item_without_a_measure_is_listed_without_an_amount() -> None:
 
     food = CATALOG.get_food(IDS["rice_white_raw"])
     blocks = render_shopping([ShoppingItem(food, 50.0, None, 0.0)], 3)
-    assert f"• {food.name_ru} — {texts.SHOPPING_NO_AMOUNT}" in blocks[1]
-    assert blocks[0].endswith("на 3 дня (то, что уже есть дома, я не включала)")
+    assert f"• {food.name_ru} — <b>{texts.SHOPPING_NO_AMOUNT}</b>" in blocks[1]
+    assert "на 3 дня</b>" in blocks[0]
+    assert blocks[0].endswith("<i>То, что уже есть дома, я не включала.</i>")
 
 
 def test_pack_respects_the_limit_and_keeps_order() -> None:
@@ -224,7 +225,7 @@ def test_staples_are_listed_in_their_own_block_at_the_end() -> None:
     assert blocks[-1].startswith(texts.SHOPPING_STAPLES_TITLE)
     assert f"• {oil.name_ru} — " in blocks[-1]
     assert not any(oil.name_ru in b for b in blocks[:-1])  # not repeated under its category
-    assert any(b.startswith("Крупы и макароны\n• ") for b in blocks)
+    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n• ") for b in blocks)
 
 
 def test_without_staples_there_is_no_staple_block() -> None:
@@ -233,3 +234,26 @@ def test_without_staples_there_is_no_staple_block() -> None:
     rice = CATALOG.get_food(IDS["rice_white_raw"])
     blocks = render_shopping([ShoppingItem(rice, 50.0, None, 0.0)], 1)
     assert not any(b.startswith(texts.SHOPPING_STAPLES_TITLE) for b in blocks)
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [(1, "1 год"), (2, "2 года"), (5, "5 лет"), (11, "11 лет"), (21, "21 год"), (32, "32 года"),
+     (100, "100 лет"), (112, "112 лет")],
+)  # fmt: skip
+def test_plural_years(count: int, expected: str) -> None:
+    from nutrition_bot.handlers.render import plural
+
+    assert plural(count, texts.YEARS_FORMS) == expected
+
+
+def test_shopping_escapes_food_names() -> None:
+    from dataclasses import replace
+
+    from nutrition_bot.core.shopping import ShoppingItem
+    from tests.telegram_html import html_problems
+
+    food = replace(CATALOG.get_food(IDS["rice_white_raw"]), name_ru="Рис <особый> & Co")
+    blocks = render_shopping([ShoppingItem(food, 50.0, None, 0.0)], 1)
+    assert "Рис &lt;особый&gt; &amp; Co" in blocks[1]
+    assert not any(html_problems(b) for b in blocks)

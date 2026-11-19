@@ -16,6 +16,7 @@ from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup, Up
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot.core.measures import Catalog
+from tests.telegram_html import html_problems
 
 
 class MockedSession(BaseSession):
@@ -134,6 +135,10 @@ class BotHarness:
                         data.append(button.callback_data or "")
                         labels.append(button.text)
             text = method.caption if isinstance(method, SendPhoto) else method.text
+            # The bot sends Telegram HTML by default: a stray "<" or "&" would make Telegram
+            # refuse the message, so every reply in every test must be valid HTML.
+            problems = html_problems(text or "")
+            assert not problems, f"invalid Telegram HTML {problems}: {text!r}"
             replies.append(
                 Reply(
                     text or "",

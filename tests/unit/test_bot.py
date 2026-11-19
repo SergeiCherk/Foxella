@@ -51,8 +51,8 @@ async def test_run_prepares_everything_then_polls_and_cleans_up(
     monkeypatch.setenv("DATABASE_URL", db_url)
 
     class FakeBot:
-        def __init__(self, token: str) -> None:
-            calls.append(f"bot:{token}")
+        def __init__(self, token: str, default: Any = None) -> None:
+            calls.append(f"bot:{token}:html={default.parse_mode == 'HTML'}")
             self.session = self
 
         async def set_my_commands(self, commands: list[Any]) -> None:
@@ -68,7 +68,7 @@ async def test_run_prepares_everything_then_polls_and_cleans_up(
     monkeypatch.setattr(Dispatcher, "start_polling", fake_polling)
     settings = Settings(_env_file=None, bot_token="123:abc", database_url=db_url)  # type: ignore[call-arg]
     await run(settings)
-    assert calls == ["bot:123:abc", "commands:6", "polling", "closed"]
+    assert calls == ["bot:123:abc:html=True", "commands:6", "polling", "closed"]
     assert (tmp_path / "run.db").exists()
 
 
@@ -80,7 +80,7 @@ async def test_run_cleans_up_when_telegram_is_unreachable_at_start(
     monkeypatch.setenv("DATABASE_URL", db_url)
 
     class DownBot:
-        def __init__(self, token: str) -> None:
+        def __init__(self, token: str, default: Any = None) -> None:
             self.session = self
 
         async def set_my_commands(self, commands: list[Any]) -> None:

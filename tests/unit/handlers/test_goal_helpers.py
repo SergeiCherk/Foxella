@@ -64,4 +64,4 @@ def test_low_kcal_note_texts(settings) -> None:  # type: ignore[no-untyped-def]
     tiny_man = Profile(Sex.MALE, 90, 150.0, 40.0, ActivityLevel.SEDENTARY, Goal.LOSE)
     assert "1500 ккал для мужчин" in low_kcal_note(tiny_man, 1071.0, settings)
     assert low_kcal_note(tiny_woman, 1200.0, settings) == ""
-    assert texts.LOW_KCAL_NOTE.startswith("Обрати внимание")
+    assert texts.LOW_KCAL_NOTE.startswith("⚠️ <b>Обрати внимание")

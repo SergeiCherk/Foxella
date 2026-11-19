@@ -118,7 +118,7 @@ async def test_typed_terms_are_understood(app: BotHarness) -> None:
     await app.onboard()
     await app.press("goalcheck:start")
     await app.say("60 кг")
-    assert (await app.say("24 недели"))[-1].text.startswith("Отличный план")
+    assert (await app.say("24 недели"))[-1].text.startswith(texts.GOAL_OK[:20])
 
 
 async def test_a_target_that_contradicts_the_goal_is_asked_again(app: BotHarness) -> None:
@@ -152,7 +152,7 @@ async def test_a_bad_term_is_asked_again(app: BotHarness, bad_weeks: str) -> Non
     await app.say("60")
     result = await app.say(bad_weeks)
     assert result[-1].text == texts.GOAL_BAD_WEEKS.format(max_weeks=104)
-    assert (await app.press("weeks:24"))[-1].text.startswith("Отличный план")
+    assert (await app.press("weeks:24"))[-1].text.startswith(texts.GOAL_OK[:20])
 
 
 async def test_no_safe_plan_for_a_very_small_user_points_to_a_doctor(app: BotHarness) -> None:

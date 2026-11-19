@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Every message the person sees was rewritten in one style: bold titles, highlighted numbers,
+  examples in italics, "Шаг N из 6" in the questionnaire, icons on buttons and shopping
+  sections, a readable profile ("32 года", values without button icons) and "Приятного
+  аппетита!" after a menu. The bot always speaks to the person as "ты" and avoids slashed
+  forms ("активна/активен", "Съела/съел") by rewording. After "не по плану" there is a "Составить
+  меню" button instead of a bare command.
+- All messages are now Telegram HTML (`bot.create_bot`, link previews off). Everything a person
+  or the language model wrote is escaped with `render.html_text`; the test harness checks every
+  sent message with a strict Telegram HTML validator (`tests/telegram_html.py`).
+- Calories and macros now come from USDA FoodData Central (SR Legacy 2018-04) for 102 of 116
+  foods: `src/nutrition_bot/data/food_sources.csv` names the USDA record of each food, and
+  `scripts/import_usda.py` refreshes `foods.csv` from the download (git-ignored `data/usda/`).
+  Cooked grains, pasta and legumes are the dry food divided by the yield factor, because USDA
+  cooks them thinner. 14 Russian products (творог, кефир, сметана and others) keep their values
+  until they are checked against labels. Notable changes: lean beef 230 -> 185 kcal and lean pork
+  200 -> 143 kcal (cooked), cooked lentils 116 -> 141 kcal (the old value did not match the yield
+  factor, so shopping lists were off).
 - Portions sound more natural: a quarter ("1¼") is used only for glasses and spoons; a bunch, a
   pack or a ladle go in whole and half numbers. If a meal cannot be fitted that way, quarters for
   any measure are still used as a last resort, so menus are not lost (`MenuConfig.fine_measures`).

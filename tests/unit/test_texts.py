@@ -123,3 +123,44 @@ def test_new_texts_format_cleanly() -> None:
         assert "{" not in text
         assert "}" not in text
         assert text == text.strip()
+
+
+# ---- formatting: every message is Telegram HTML, written to "ты" without slashed forms
+
+
+def _all_texts() -> list[tuple[str, str]]:
+    from nutrition_bot import texts
+
+    found: list[tuple[str, str]] = []
+    for name in dir(texts):
+        value = getattr(texts, name)
+        if isinstance(value, str) and not name.startswith("_"):
+            found.append((name, value))
+        elif isinstance(value, dict):
+            found += [(f"{name}[{k}]", v) for k, v in value.items() if isinstance(v, str)]
+    return found
+
+
+@pytest.mark.parametrize(("name", "value"), _all_texts())
+def test_every_text_is_valid_telegram_html(name: str, value: str) -> None:
+    from tests.telegram_html import html_problems
+
+    assert not html_problems(value), name
+
+
+@pytest.mark.parametrize(("name", "value"), _all_texts())
+def test_no_slashed_gender_forms(name: str, value: str) -> None:
+    """ "активна/активен", "заглянул(а)" read badly: the texts are written around them."""
+    import re
+
+    assert not re.search(r"[а-яё]/[а-яё]|[а-яё]\([а-яё]{1,2}\)", value.lower()), name
+
+
+@pytest.mark.parametrize(("name", "value"), _all_texts())
+def test_texts_speak_to_the_person_as_ty(name: str, value: str) -> None:
+    import re
+
+    formal = re.search(
+        r"\b(вы|вас|вам|ваш\w*|нажмите|напишите|выберите|попробуйте)\b", value.lower()
+    )
+    assert formal is None, (name, formal.group(0) if formal else "")
