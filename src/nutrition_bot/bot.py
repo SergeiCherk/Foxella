@@ -50,7 +50,7 @@ def build_dispatcher(
 
 def migrate(root: Path = PROJECT_ROOT) -> None:
     """Bring the database schema to the latest version (blocking; run it in a thread)."""
-    cfg = Config(str(root / "alembic.ini"))
+    cfg = Config(str(root / "alembic.ini"), attributes={"configure_logger": False})
     cfg.set_main_option("script_location", str(root / "alembic"))
     command.upgrade(cfg, "head")
 

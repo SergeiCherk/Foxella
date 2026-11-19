@@ -36,6 +36,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   conversation. `scripts/beta_report.py` prints how many people did what and how many came back
   in week 2 and week 3 (pure logic in `core/metrics.py`).
 
+### Fixed
+- The bot log kept only warnings after startup: running migrations applied `alembic.ini`, which
+  set the root logger to WARNING and replaced its handlers, so `LOG_LEVEL=INFO` was lost. Alembic
+  now configures logging only when it is run from the command line.
+- The menu time limit no longer starts an LLM call that is cancelled at once: asyncio may fire a
+  timeout one clock tick early (15.6 ms on Windows), so less than a tick left counts as the
+  deadline reached. This also fixes a test that failed now and then on Windows.
+
+### Security
+- CI jobs run with a read-only token (`permissions: contents: read`).
+- A gitleaks pre-commit hook catches tokens and API keys before a commit, not only in CI.
+- Removed `foxella-consent.patch`, a leftover diff committed by mistake (it held no secrets).
+
 ### Changed
 - Whole-piece foods (eggs, tomatoes, cucumbers, apples, bananas and the like) are now always
   whole numbers: menu portions use step 1 instead of 0.5/0.25 and the shopping list rounds up

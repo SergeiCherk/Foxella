@@ -14,8 +14,9 @@ from nutrition_bot.db.models import Base
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
-if config.config_file_name is not None:
-    # Keep the application loggers alive: the bot runs migrations at startup.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    # Only for the alembic command line. The bot runs migrations at startup with its own
+    # logging already set up, and alembic.ini would replace it (root level WARNING).
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata

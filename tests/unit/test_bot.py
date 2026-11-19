@@ -140,3 +140,22 @@ def test_migrations_do_not_switch_off_the_application_loggers(
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{(tmp_path / 'l.db').as_posix()}")
     migrate()
     assert probe.disabled is False
+
+
+def test_migrations_keep_the_application_log_level_and_handlers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """alembic.ini sets the root logger to WARNING; at bot startup that hid every INFO line."""
+    root = logging.getLogger()
+    saved_level, saved_handlers = root.level, root.handlers[:]
+    marker = logging.NullHandler()
+    try:
+        root.setLevel(logging.INFO)
+        root.addHandler(marker)
+        monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{(tmp_path / 'k.db').as_posix()}")
+        migrate()
+        assert root.level == logging.INFO
+        assert marker in root.handlers
+    finally:
+        root.setLevel(saved_level)
+        root.handlers[:] = saved_handlers

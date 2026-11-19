@@ -46,6 +46,11 @@ from nutrition_bot.core.slip import apply_adjustment
 
 logger = logging.getLogger(__name__)
 
+# asyncio fires timers up to one clock tick early (15.6 ms on Windows, about 1 ns on Linux), so a
+# call cancelled "at" the deadline can leave a tiny positive remainder. Less than a tick left
+# counts as the deadline reached: otherwise a call that is cancelled at once would be started.
+DEADLINE_SLACK_S = time.get_clock_info("monotonic").resolution
+
 MAX_PROBLEMS = 8  # more feedback would only confuse the model
 CALORIE_WORDS = re.compile(r"ккал|калор|kcal", re.IGNORECASE)
 
@@ -764,7 +769,7 @@ async def build_meal(
 
     for _ in range(1 + cfg.max_llm_retries):
         remaining = None if deadline is None else deadline - clock()
-        if remaining is not None and remaining <= 0:
+        if remaining is not None and remaining <= DEADLINE_SLACK_S:
             problems = ("the time limit was reached",)
             logger.warning("time limit reached before attempt %d", attempts + 1)
             break

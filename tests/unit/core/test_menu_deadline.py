@@ -8,6 +8,7 @@ import pytest
 from nutrition_bot.config import MenuConfig, NormsConfig
 from nutrition_bot.core.errors import LLMError
 from nutrition_bot.core.menu import (
+    DEADLINE_SLACK_S,
     DishRequest,
     MealSource,
     build_meal,
@@ -83,6 +84,19 @@ async def test_no_retry_is_started_after_the_deadline() -> None:
     )  # fmt: skip
     assert result.attempts == 1
     assert len(llm.requests) == 1
+    assert result.source is MealSource.FALLBACK
+
+
+async def test_less_than_one_clock_tick_left_counts_as_the_deadline() -> None:
+    """asyncio may cancel a call one tick early; the next meal must not start a doomed call."""
+    catalog, _ = real_catalog()
+    llm = FakeLLM()
+    result = await build_meal(
+        llm, catalog, MealType.LUNCH, TARGET, cooked_or_ready_ids(catalog), CFG,
+        deadline=10.0, clock=lambda: 10.0 - DEADLINE_SLACK_S / 2,
+    )  # fmt: skip
+    assert llm.requests == []
+    assert result.attempts == 0
     assert result.source is MealSource.FALLBACK
 
 
