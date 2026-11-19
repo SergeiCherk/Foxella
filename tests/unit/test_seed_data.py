@@ -214,7 +214,7 @@ def test_real_data_has_enough_foods_and_measures(
     real: tuple[list[FoodRow], list[MeasureRow]],
 ) -> None:
     foods, measures = real
-    assert 100 <= len(foods) <= 150
+    assert 150 <= len(foods) <= 300
     assert len(measures) >= len(foods)
 
 

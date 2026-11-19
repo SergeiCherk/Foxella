@@ -81,7 +81,7 @@ async def test_two_ladles_of_rice_end_to_end(
     ladle = next(m for m in catalog.measures_for(rice.id) if m.name_ru == "половник")
     result = nutrients_for_measure(rice, ladle, 2)
     assert result.kcal == pytest.approx(260.0)  # 200 g * 130 kcal / 100 g
-    assert result.protein_g == pytest.approx(5.4)
+    assert result.protein_g == pytest.approx(5.0)  # 200 g * 2.5 g (7.1 g dry / yield 2.8)
 
 
 async def test_cooked_foods_are_linked_to_raw_foods(

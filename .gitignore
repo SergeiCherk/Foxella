@@ -23,6 +23,8 @@ htmlcov/
 *.db
 *.sqlite3
 data/*.db
+# USDA FoodData Central downloads (large; re-download from fdc.nal.usda.gov)
+data/usda/
 
 # IDE / OS
 .vscode/
