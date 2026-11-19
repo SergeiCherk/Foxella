@@ -77,3 +77,28 @@ def test_models_and_migration_do_not_drift(tmp_path: Path, monkeypatch: pytest.M
         diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
     engine.dispose()
     assert diff == []
+
+
+def test_upgrading_keeps_existing_people_with_an_empty_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """People saved before the disclaimer button stay, and are asked once on their next /start."""
+    import sqlite3
+
+    db_file = tmp_path / "old.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file.as_posix()}")
+    cfg = alembic_config()
+    command.upgrade(cfg, "0003")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO users (telegram_id, sex, age, height_cm, weight_kg, activity, goal,"
+            " pending_adjust, created_at) VALUES (7, 'male', 40, 180, 80, 'light', 'lose', '[]',"
+            " '2026-11-01 10:00:00')"
+        )
+    command.upgrade(cfg, "head")
+    with sqlite3.connect(db_file) as conn:
+        row = conn.execute("SELECT age, disclaimer_accepted_at FROM users").fetchone()
+    assert row == (40, None)
+    command.downgrade(cfg, "0003")
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT age FROM users").fetchone() == (40,)

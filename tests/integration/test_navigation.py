@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendMessage, SendPhoto
-from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.types import FSInputFile, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from nutrition_bot import texts
 from nutrition_bot.config import WELCOME_IMAGE
@@ -22,7 +22,8 @@ async def test_start_greets_with_a_picture_then_asks_the_first_question(app: Bot
     assert replies[0].is_photo
     assert replies[0].text == f"{texts.START}\n\n{texts.DISCLAIMER}"
     assert len(replies[0].text) <= 1024  # a photo caption is limited
-    assert replies[-1].text == texts.ASK_SEX
+    assert replies[0].buttons == ("consent:ok",)
+    assert (await app.press("consent:ok"))[-1].text == texts.ASK_SEX
 
 
 async def test_greeting_falls_back_to_text_without_the_picture(
@@ -32,7 +33,7 @@ async def test_greeting_falls_back_to_text_without_the_picture(
     replies = await app.say("/start")
     assert not replies[0].is_photo
     assert texts.DISCLAIMER in replies[0].text
-    assert replies[-1].text == texts.ASK_SEX
+    assert replies[0].buttons == ("consent:ok",)
 
 
 async def test_greeting_falls_back_to_text_if_telegram_rejects_the_picture(
@@ -45,7 +46,7 @@ async def test_greeting_falls_back_to_text_if_telegram_rejects_the_picture(
     replies = await app.say("/start")
     assert not replies[0].is_photo
     assert texts.START in replies[0].text
-    assert replies[-1].text == texts.ASK_SEX
+    assert replies[0].buttons == ("consent:ok",)
 
 
 async def test_onboarding_sets_the_panel_just_before_the_result(app: BotHarness) -> None:
@@ -111,3 +112,41 @@ async def test_deleting_the_data_removes_the_panel(app: BotHarness) -> None:
     sent = [m for m in app.session.requests if isinstance(m, SendMessage)]
     assert sent[-1].text == texts.DELETE_DONE
     assert isinstance(sent[-1].reply_markup, ReplyKeyboardRemove)
+
+
+def _photo_requests(app: BotHarness) -> list[SendPhoto]:
+    return [r for r in app.session.requests if isinstance(r, SendPhoto)]
+
+
+async def test_the_picture_is_uploaded_once_and_then_sent_by_file_id(app: BotHarness) -> None:
+    await app.say("/start", user_id=1)
+    await app.say("/start", user_id=2)
+    first, second = _photo_requests(app)
+    assert isinstance(first.photo, FSInputFile)
+    assert second.photo == "FILE-ID"  # the id Telegram returned for the biggest size
+    assert second.caption == first.caption
+    assert second.reply_markup == first.reply_markup
+
+
+async def test_a_refused_file_id_is_forgotten_and_the_picture_uploaded_again(
+    app: BotHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await app.say("/start", user_id=1)
+    real = Message.answer_photo
+    calls = 0
+
+    async def stale_id(self: Message, photo: object, *args: object, **kwargs: object) -> Message:
+        nonlocal calls
+        calls += 1
+        if isinstance(photo, str):
+            raise TelegramBadRequest(method=SendPhoto(chat_id=1, photo="x"), message="wrong id")
+        return await real(self, photo, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Message, "answer_photo", stale_id)
+    replies = await app.say("/start", user_id=2)
+    assert replies[0].is_photo
+    assert calls == 2  # the stale id was tried, then the file was uploaded
+    assert isinstance(_photo_requests(app)[-1].photo, FSInputFile)
+    monkeypatch.setattr(Message, "answer_photo", real)
+    await app.say("/start", user_id=3)
+    assert _photo_requests(app)[-1].photo == "FILE-ID"  # remembered again after the upload

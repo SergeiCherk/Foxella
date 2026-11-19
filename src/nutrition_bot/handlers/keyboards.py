@@ -30,6 +30,11 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def consent_keyboard() -> InlineKeyboardMarkup:
+    """The single "Понятно" button under the disclaimer."""
+    return _build([[(texts.BTN_CONSENT, "consent:ok")]])
+
+
 def sex_keyboard() -> InlineKeyboardMarkup:
     """Choice of sex."""
     return _build([[(texts.SEX_LABELS[s], f"sex:{s.value}") for s in Sex]])

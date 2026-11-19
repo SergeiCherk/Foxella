@@ -4,6 +4,7 @@ import json
 import logging
 import math
 from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -103,8 +104,13 @@ class UserRepository:
             goal=Goal(user.goal),
         )
 
-    async def save_profile(self, telegram_id: int, profile: Profile) -> None:
-        """Create or update the profile. Pantry and menu of an existing user are kept."""
+    async def save_profile(
+        self, telegram_id: int, profile: Profile, accepted_at: datetime | None = None
+    ) -> None:
+        """Create or update the profile. Pantry and menu of an existing user are kept.
+
+        ``accepted_at`` (when the disclaimer was confirmed) is stored only if none is yet.
+        """
         user = await self._session.get(UserORM, telegram_id)
         if user is None:
             user = UserORM(telegram_id=telegram_id, pending_adjust="[]")
@@ -115,7 +121,21 @@ class UserRepository:
         user.weight_kg = profile.weight_kg
         user.activity = profile.activity.value
         user.goal = profile.goal.value
+        if user.disclaimer_accepted_at is None:
+            user.disclaimer_accepted_at = accepted_at
         await self._session.commit()
+
+    async def has_accepted_disclaimer(self, telegram_id: int) -> bool:
+        """``True`` if this person confirmed the disclaimer."""
+        user = await self._session.get(UserORM, telegram_id)
+        return user is not None and user.disclaimer_accepted_at is not None
+
+    async def accept_disclaimer(self, telegram_id: int) -> None:
+        """Record the confirmation now (people from before the button existed). Idempotent."""
+        user = await self._session.get(UserORM, telegram_id)
+        if user is not None and user.disclaimer_accepted_at is None:
+            user.disclaimer_accepted_at = datetime.now(UTC)
+            await self._session.commit()
 
     async def delete_all(self, telegram_id: int) -> bool:
         """Remove the user and, by cascade, the pantry and the menu. ``True`` if there was one."""

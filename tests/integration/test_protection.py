@@ -25,6 +25,7 @@ async def onboard_as(
     app: BotHarness, sex: str, age: str, height: str, weight: str, activity: str, goal: str
 ) -> list[Reply]:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press(f"sex:{sex}")
     await app.say(age)
     await app.say(height)

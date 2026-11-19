@@ -6,6 +6,8 @@ from nutrition_bot.core.slip import SlipOutcome
 
 START = "Привет! Я Фоксела 🦊 Помогу составить питание без весов и без чувства вины."
 DISCLAIMER = "Я не заменяю врача и не ставлю диагнозов. Я предназначена для взрослых (18+)."
+BTN_CONSENT = "Понятно, мне есть 18"
+CONSENT_REMINDER = "Чтобы начать, нажмите кнопку ниже: так я буду знать, что вы прочитали это 🙂"
 
 # Messages after a day that differed from the plan. The tone is always calm and kind: no blame,
 # no "you should", no punishment. Placeholders: {excess_kcal}, {per_day_kcal} (whole numbers).

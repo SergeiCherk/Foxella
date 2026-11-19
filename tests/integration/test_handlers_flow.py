@@ -11,6 +11,7 @@ from nutrition_bot.config import Settings
 from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.models import ActivityLevel, Goal, Profile, Sex
 from nutrition_bot.core.norms import calculate_daily_norm
+from nutrition_bot.db.models import UserORM
 from nutrition_bot.db.repositories.events import EventRepository
 from nutrition_bot.db.repositories.users import UserRepository
 from nutrition_bot.logging_setup import setup_logging
@@ -40,11 +41,81 @@ async def make_menu(app: BotHarness, days: int = 1, pantry: str | None = None) -
 # ------------------------------------------------------------------ onboarding
 
 
-async def test_start_shows_disclaimer_and_asks_sex(app: BotHarness) -> None:
+async def test_start_shows_disclaimer_and_waits_for_the_button(app: BotHarness) -> None:
     replies = await app.say("/start")
+    assert len(replies) == 1
     assert texts.DISCLAIMER in replies[0].text
+    assert replies[0].buttons == ("consent:ok",)
+    asked = await app.press("consent:ok")
+    assert asked[-1].text == texts.ASK_SEX
+    assert set(asked[-1].buttons) == {"sex:male", "sex:female"}
+
+
+async def test_questions_are_not_asked_before_the_button(app: BotHarness) -> None:
+    await app.say("/start")
+    replies = await app.say("32")
+    assert replies[-1].text == texts.CONSENT_REMINDER
+    assert replies[-1].buttons == ("consent:ok",)
+    assert await app.press("sex:female") == []  # the sex step is not open yet
+
+
+async def test_a_command_while_waiting_for_the_button_is_still_a_command(app: BotHarness) -> None:
+    await app.say("/start")
+    assert (await app.say("/menu"))[-1].text == texts.NEED_PROFILE
+
+
+async def test_the_confirmation_time_is_stored_with_the_profile(app: BotHarness) -> None:
+    await app.onboard()
+    async with app.session_factory() as session:
+        repo = UserRepository(session)
+        assert await repo.has_accepted_disclaimer(1)
+        user = await session.get(UserORM, 1)
+        assert user is not None
+        assert user.disclaimer_accepted_at is not None
+
+
+async def test_editing_the_profile_keeps_the_first_confirmation(app: BotHarness) -> None:
+    await app.onboard()
+    async with app.session_factory() as session:
+        first = (await session.get(UserORM, 1)).disclaimer_accepted_at  # type: ignore[union-attr]
+    await app.press("profile:edit")
+    await app.press("sex:female")
+    await app.say("33")
+    await app.say("168")
+    await app.say("64")
+    await app.press("act:light")
+    await app.press("goal:maintain")
+    async with app.session_factory() as session:
+        user = await session.get(UserORM, 1)
+        assert user is not None
+        assert user.disclaimer_accepted_at == first
+
+
+async def test_a_person_from_before_the_button_confirms_on_the_next_start(
+    app: BotHarness,
+) -> None:
+    await app.onboard()
+    async with app.session_factory() as session:
+        user = await session.get(UserORM, 1)
+        assert user is not None
+        user.disclaimer_accepted_at = None  # how people saved before this version look
+        await session.commit()
+    replies = await app.say("/start")
+    assert replies[-1].buttons == ("consent:ok",)
+    assert await stored_profile(app) == PROFILE  # nothing is asked again, nothing is lost
+    done = await app.press("consent:ok")
+    assert done[-1].text == texts.WELCOME_BACK
+    async with app.session_factory() as session:
+        assert await UserRepository(session).has_accepted_disclaimer(1)
+    assert (await app.say("/start"))[-1].text == texts.WELCOME_BACK  # not asked a second time
+
+
+async def test_the_button_pressed_after_a_restart_still_starts_the_questions(
+    app: BotHarness,
+) -> None:
+    # The conversation state lives in memory, so a restart forgets it; the button must still work.
+    replies = await app.press("consent:ok")
     assert replies[-1].text == texts.ASK_SEX
-    assert set(replies[-1].buttons) == {"sex:male", "sex:female"}
 
 
 async def test_full_onboarding_saves_profile_and_shows_norm_from_code(
@@ -60,6 +131,7 @@ async def test_full_onboarding_saves_profile_and_shows_norm_from_code(
 @pytest.mark.parametrize("age", ["17", "5", "17 лет"])
 async def test_minors_are_refused_and_nothing_is_stored(app: BotHarness, age: str) -> None:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press("sex:male")
     replies = await app.say(age)
     assert replies[-1].text == texts.UNDERAGE
@@ -83,6 +155,7 @@ async def test_bad_numbers_are_asked_again(
     app: BotHarness, step: str, answer: str, expected: str
 ) -> None:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press("sex:female")
     if step in ("height", "weight"):
         await app.say("32")
@@ -94,6 +167,7 @@ async def test_bad_numbers_are_asked_again(
 
 async def test_numbers_accept_units_and_decimal_comma(app: BotHarness) -> None:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press("sex:male")
     await app.say("40 лет")
     await app.say("181 см")
@@ -106,6 +180,7 @@ async def test_numbers_accept_units_and_decimal_comma(app: BotHarness) -> None:
 
 async def test_command_in_the_middle_leaves_the_conversation(app: BotHarness) -> None:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press("sex:female")
     replies = await app.say("/menu")
     assert replies[-1].text == texts.NEED_PROFILE
@@ -537,12 +612,14 @@ async def test_nothing_is_recorded_without_a_profile_or_without_a_menu(app: BotH
     await app.say("/shopping")
     assert await stored_events(app) == []
     await app.say("/start")  # onboarding started but not finished
+    await app.press("consent:ok")
     await app.press("sex:female")
     assert await stored_events(app) == []
 
 
 async def test_a_refused_minor_leaves_no_event(app: BotHarness) -> None:
     await app.say("/start")
+    await app.press("consent:ok")
     await app.press("sex:female")
     assert (await app.say("15"))[-1].text == texts.UNDERAGE
     assert await stored_events(app) == []

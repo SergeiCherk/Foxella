@@ -49,6 +49,20 @@ class MockedSession(BaseSession):
                 },
                 context={"bot": bot},
             )
+        if isinstance(method, SendPhoto):
+            return Message.model_validate(
+                {
+                    "message_id": len(self.requests),
+                    "date": int(datetime.now(UTC).timestamp()),
+                    "chat": {"id": method.chat_id, "type": "private"},
+                    "caption": method.caption,
+                    "photo": [
+                        {"file_id": "small", "file_unique_id": "s", "width": 90, "height": 90},
+                        {"file_id": "FILE-ID", "file_unique_id": "b", "width": 800, "height": 800},
+                    ],
+                },
+                context={"bot": bot},
+            )
         return True
 
 
@@ -153,6 +167,7 @@ class BotHarness:
     async def onboard(self, user_id: int = 1, goal: str = "lose") -> list[Reply]:
         """The whole onboarding with typical answers; returns the final replies."""
         await self.say("/start", user_id)
+        await self.press("consent:ok", user_id)
         await self.press("sex:female", user_id)
         await self.say("32", user_id)
         await self.say("168", user_id)

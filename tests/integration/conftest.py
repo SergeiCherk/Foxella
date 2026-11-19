@@ -8,11 +8,18 @@ import pytest
 
 from nutrition_bot.config import Settings
 from nutrition_bot.core.menu import DishGenerator
+from nutrition_bot.handlers import onboarding
 from nutrition_bot.handlers.guard import MenuGuard
 from tests.integration.app_builder import bot_app
 from tests.integration.bot_harness import BotHarness
 
 AppFactory = Callable[..., Awaitable[BotHarness]]
+
+
+@pytest.fixture(autouse=True)
+def _forget_the_welcome_picture() -> None:
+    """The remembered ``file_id`` lives in the process; every test starts without it."""
+    onboarding._picture.file_id = None
 
 
 @pytest.fixture

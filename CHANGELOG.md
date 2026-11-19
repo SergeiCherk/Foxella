@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The greeting now introduces the bot as Foxella.
 
 ### Added
+- The disclaimer is confirmed with a "Понятно, мне есть 18" button before the first question;
+  the time is stored in `users.disclaimer_accepted_at` (migration `0004`). People saved earlier
+  stay with an empty value and are asked once on their next `/start`; editing the profile keeps
+  the first confirmation.
+- The greeting picture is uploaded once per run and then sent by its Telegram `file_id`
+  (kept in memory; a refused id is forgotten and the file is uploaded again).
+- CI checks the SHA256 of the downloaded gitleaks archive before unpacking it.
 - Usage events for the beta (stage 8): "onboarding done", "menu received" and "slip started" are
   stored in the new `user_events` table (migration `0003`) as a fixed name and a time, with no
   message text. They are removed with the user by `/delete_me`; a failed write never breaks a

@@ -119,6 +119,10 @@ class UserORM(Base):
     # JSON list of kcal changes for the next days after eating off-plan; used by the next menu.
     pending_adjust: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # When the person pressed "Понятно" under the disclaimer; NULL for people from before it.
+    disclaimer_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
 
 class UserFoodORM(Base):

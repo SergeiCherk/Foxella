@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 class Onboarding(StatesGroup):
     """Questions asked after /start."""
 
+    consent = State()
     sex = State()
     age = State()
     height = State()

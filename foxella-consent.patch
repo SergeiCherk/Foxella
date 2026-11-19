@@ -1,0 +1,703 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index f3b2084..c83a4b0 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -33,6 +33,8 @@ jobs:
+           fetch-depth: 0
+       - name: Install gitleaks
+         run: |
+-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
++          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
++          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  gitleaks.tar.gz" | sha256sum --check
++          tar -xz -f gitleaks.tar.gz gitleaks
+       - name: Scan the whole git history for secrets
+         run: ./gitleaks git --redact -v --exit-code 2
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1bce56e..9e42d01 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+ - The greeting now introduces the bot as Foxella.
+ 
+ ### Added
++- The disclaimer is confirmed with a "Понятно, мне есть 18" button before the first question;
++  the time is stored in `users.disclaimer_accepted_at` (migration `0004`). People saved earlier
++  stay with an empty value and are asked once on their next `/start`; editing the profile keeps
++  the first confirmation.
++- The greeting picture is uploaded once per run and then sent by its Telegram `file_id`
++  (kept in memory; a refused id is forgotten and the file is uploaded again).
++- CI checks the SHA256 of the downloaded gitleaks archive before unpacking it.
+ - Usage events for the beta (stage 8): "onboarding done", "menu received" and "slip started" are
+   stored in the new `user_events` table (migration `0003`) as a fixed name and a time, with no
+   message text. They are removed with the user by `/delete_me`; a failed write never breaks a
+diff --git a/alembic/versions/0004_disclaimer_consent.py b/alembic/versions/0004_disclaimer_consent.py
+new file mode 100644
+index 0000000..035d3f6
+--- /dev/null
++++ b/alembic/versions/0004_disclaimer_consent.py
+@@ -0,0 +1,32 @@
++"""disclaimer consent
++
++Revision ID: 0004
++Revises: 0003
++Create Date: 2026-11-19 12:00:00.000000
++
++"""
++
++from collections.abc import Sequence
++
++import sqlalchemy as sa
++from alembic import op
++
++# revision identifiers, used by Alembic.
++revision: str = "0004"
++down_revision: str | Sequence[str] | None = "0003"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Upgrade schema. Existing people stay NULL: they never pressed the button."""
++    with op.batch_alter_table("users") as batch:
++        batch.add_column(
++            sa.Column("disclaimer_accepted_at", sa.DateTime(timezone=True), nullable=True)
++        )
++
++
++def downgrade() -> None:
++    """Downgrade schema."""
++    with op.batch_alter_table("users") as batch:
++        batch.drop_column("disclaimer_accepted_at")
+diff --git a/examples/01-znakomstvo.md b/examples/01-znakomstvo.md
+index 573f281..49e5221 100644
+--- a/examples/01-znakomstvo.md
++++ b/examples/01-znakomstvo.md
+@@ -13,6 +13,10 @@
+ >
+ > Я не заменяю врача и не ставлю диагнозов. Я предназначена для взрослых (18+).
+ 
++Кнопки: `Понятно, мне есть 18`
++
++**Вы нажали:** «Понятно, мне есть 18»
++
+ **Бот:**
+ > Давай познакомимся, это займёт минуту. Я посчитаю твою норму калорий и БЖУ.
+ >
+diff --git a/src/nutrition_bot/db/models.py b/src/nutrition_bot/db/models.py
+index 12528ab..8611d5f 100644
+--- a/src/nutrition_bot/db/models.py
++++ b/src/nutrition_bot/db/models.py
+@@ -119,6 +119,10 @@ class UserORM(Base):
+     # JSON list of kcal changes for the next days after eating off-plan; used by the next menu.
+     pending_adjust: Mapped[str] = mapped_column(Text, default="[]")
+     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
++    # When the person pressed "Понятно" under the disclaimer; NULL for people from before it.
++    disclaimer_accepted_at: Mapped[datetime | None] = mapped_column(
++        DateTime(timezone=True), nullable=True, default=None
++    )
+ 
+ 
+ class UserFoodORM(Base):
+diff --git a/src/nutrition_bot/db/repositories/users.py b/src/nutrition_bot/db/repositories/users.py
+index b82d8a0..6641998 100644
+--- a/src/nutrition_bot/db/repositories/users.py
++++ b/src/nutrition_bot/db/repositories/users.py
+@@ -4,6 +4,7 @@ import json
+ import logging
+ import math
+ from collections.abc import Iterable, Sequence
++from datetime import UTC, datetime
+ from typing import Any
+ 
+ from sqlalchemy import delete, select
+@@ -103,8 +104,13 @@ class UserRepository:
+             goal=Goal(user.goal),
+         )
+ 
+-    async def save_profile(self, telegram_id: int, profile: Profile) -> None:
+-        """Create or update the profile. Pantry and menu of an existing user are kept."""
++    async def save_profile(
++        self, telegram_id: int, profile: Profile, accepted_at: datetime | None = None
++    ) -> None:
++        """Create or update the profile. Pantry and menu of an existing user are kept.
++
++        ``accepted_at`` (when the disclaimer was confirmed) is stored only if none is yet.
++        """
+         user = await self._session.get(UserORM, telegram_id)
+         if user is None:
+             user = UserORM(telegram_id=telegram_id, pending_adjust="[]")
+@@ -115,8 +121,22 @@ class UserRepository:
+         user.weight_kg = profile.weight_kg
+         user.activity = profile.activity.value
+         user.goal = profile.goal.value
++        if user.disclaimer_accepted_at is None:
++            user.disclaimer_accepted_at = accepted_at
+         await self._session.commit()
+ 
++    async def has_accepted_disclaimer(self, telegram_id: int) -> bool:
++        """``True`` if this person confirmed the disclaimer."""
++        user = await self._session.get(UserORM, telegram_id)
++        return user is not None and user.disclaimer_accepted_at is not None
++
++    async def accept_disclaimer(self, telegram_id: int) -> None:
++        """Record the confirmation now (people from before the button existed). Idempotent."""
++        user = await self._session.get(UserORM, telegram_id)
++        if user is not None and user.disclaimer_accepted_at is None:
++            user.disclaimer_accepted_at = datetime.now(UTC)
++            await self._session.commit()
++
+     async def delete_all(self, telegram_id: int) -> bool:
+         """Remove the user and, by cascade, the pantry and the menu. ``True`` if there was one."""
+         user = await self._session.get(UserORM, telegram_id)
+diff --git a/src/nutrition_bot/handlers/keyboards.py b/src/nutrition_bot/handlers/keyboards.py
+index 4ce7e55..df2b127 100644
+--- a/src/nutrition_bot/handlers/keyboards.py
++++ b/src/nutrition_bot/handlers/keyboards.py
+@@ -30,6 +30,11 @@ def main_keyboard() -> ReplyKeyboardMarkup:
+     )
+ 
+ 
++def consent_keyboard() -> InlineKeyboardMarkup:
++    """The single "Понятно" button under the disclaimer."""
++    return _build([[(texts.BTN_CONSENT, "consent:ok")]])
++
++
+ def sex_keyboard() -> InlineKeyboardMarkup:
+     """Choice of sex."""
+     return _build([[(texts.SEX_LABELS[s], f"sex:{s.value}") for s in Sex]])
+diff --git a/src/nutrition_bot/handlers/onboarding.py b/src/nutrition_bot/handlers/onboarding.py
+index 4cbf931..2518268 100644
+--- a/src/nutrition_bot/handlers/onboarding.py
++++ b/src/nutrition_bot/handlers/onboarding.py
+@@ -2,12 +2,13 @@
+ 
+ import logging
+ import re
++from datetime import UTC, datetime
+ 
+ from aiogram import F, Router
+ from aiogram.exceptions import TelegramAPIError
+ from aiogram.filters import CommandStart
+ from aiogram.fsm.context import FSMContext
+-from aiogram.types import CallbackQuery, FSInputFile, Message
++from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
+ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+ 
+ from nutrition_bot import texts
+@@ -35,10 +36,30 @@ def parse_number(text: str) -> float | None:
+     return float(match.group(1).replace(",", ".")) if match else None
+ 
+ 
++def _parse_time(value: object) -> datetime | None:
++    """The time stored in the conversation data; ``None`` if it is missing or damaged."""
++    try:
++        return datetime.fromisoformat(str(value))
++    except ValueError:
++        return None
++
++
+ def _fmt(value: float) -> str:
+     return str(int(value)) if value == int(value) else str(value).replace(".", ",")
+ 
+ 
++class _PictureCache:
++    """The Telegram ``file_id`` of the greeting picture, so it is uploaded once per run.
++
++    Kept in memory: after a restart the picture is uploaded once more and remembered again.
++    """
++
++    file_id: str | None = None
++
++
++_picture = _PictureCache()
++
++
+ async def begin_onboarding(message: Message, state: FSMContext) -> None:
+     """Ask the first question (also used to edit the profile)."""
+     await state.clear()
+@@ -46,31 +67,79 @@ async def begin_onboarding(message: Message, state: FSMContext) -> None:
+     await message.answer(texts.ASK_SEX, reply_markup=keyboards.sex_keyboard())
+ 
+ 
+-async def send_greeting(message: Message) -> None:
+-    """The greeting picture with the first words; plain text if the picture cannot be sent."""
+-    caption = f"{texts.START}\n\n{texts.DISCLAIMER}"
+-    if WELCOME_IMAGE.is_file():
++async def _send_picture(message: Message, caption: str, markup: InlineKeyboardMarkup) -> bool:
++    """Send the greeting picture (by ``file_id`` when known). ``False`` if it cannot be sent."""
++    if _picture.file_id is not None:
+         try:
+-            await message.answer_photo(FSInputFile(WELCOME_IMAGE), caption=caption)
+-            return
++            await message.answer_photo(_picture.file_id, caption=caption, reply_markup=markup)
++            return True
+         except TelegramAPIError:
+-            logger.warning("welcome picture could not be sent")
+-    await message.answer(caption)
++            logger.warning("the remembered welcome picture was refused, uploading it again")
++            _picture.file_id = None
++    if not WELCOME_IMAGE.is_file():
++        return False
++    try:
++        sent = await message.answer_photo(
++            FSInputFile(WELCOME_IMAGE), caption=caption, reply_markup=markup
++        )
++    except TelegramAPIError:
++        logger.warning("welcome picture could not be sent")
++        return False
++    if isinstance(sent, Message) and sent.photo:
++        _picture.file_id = sent.photo[-1].file_id
++    return True
++
++
++async def send_greeting(message: Message, markup: InlineKeyboardMarkup) -> None:
++    """The greeting picture with the first words and the "Понятно" button; text if no picture."""
++    caption = f"{texts.START}\n\n{texts.DISCLAIMER}"
++    if not await _send_picture(message, caption, markup):
++        await message.answer(caption, reply_markup=markup)
+ 
+ 
+ async def cmd_start(message: Message, state: FSMContext, session_factory: SessionFactory) -> None:
+-    """Greet, show the disclaimer and start onboarding for a new person."""
++    """Greet and ask to confirm the disclaimer; known people who already did go straight back."""
+     await state.clear()
+     user_id = sender_id(message)
+     if user_id is None:
+         return
+     async with session_factory() as session:
+-        known = await UserRepository(session).get_profile(user_id) is not None
+-    await send_greeting(message)
+-    if known:
++        repo = UserRepository(session)
++        known = await repo.get_profile(user_id) is not None
++        accepted = known and await repo.has_accepted_disclaimer(user_id)
++    if accepted:
++        await send_greeting(message, InlineKeyboardMarkup(inline_keyboard=[]))
+         await message.answer(texts.WELCOME_BACK, reply_markup=keyboards.main_keyboard())
+-    else:
+-        await begin_onboarding(message, state)
++        return
++    await state.set_state(Onboarding.consent)
++    await send_greeting(message, keyboards.consent_keyboard())
++
++
++async def on_consent(
++    callback: CallbackQuery, state: FSMContext, session_factory: SessionFactory
++) -> None:
++    """ "Понятно" pressed: remember it, then start the questions (or welcome the person back)."""
++    message = callback_message(callback)
++    await callback.answer()
++    if message is None:
++        return
++    user_id = callback.from_user.id
++    async with session_factory() as session:
++        repo = UserRepository(session)
++        if await repo.get_profile(user_id) is not None:
++            await repo.accept_disclaimer(user_id)
++            await state.clear()
++            await message.answer(texts.WELCOME_BACK, reply_markup=keyboards.main_keyboard())
++            return
++    await state.clear()
++    await state.update_data(accepted_at=datetime.now(UTC).isoformat())
++    await state.set_state(Onboarding.sex)
++    await message.answer(texts.ASK_SEX, reply_markup=keyboards.sex_keyboard())
++
++
++async def on_consent_pending(message: Message) -> None:
++    """Any text while the disclaimer is not confirmed: ask for the button again."""
++    await message.answer(texts.CONSENT_REMINDER, reply_markup=keyboards.consent_keyboard())
+ 
+ 
+ async def on_sex(callback: CallbackQuery, state: FSMContext) -> None:
+@@ -168,6 +237,7 @@ async def on_goal(
+         return
+     data = await state.get_data()
+     await state.clear()
++    accepted_at = _parse_time(data.get("accepted_at"))
+     try:
+         profile = Profile(
+             sex=Sex(data["sex"]),
+@@ -187,7 +257,7 @@ async def on_goal(
+     async with session_factory() as session:
+         repo = UserRepository(session)
+         is_new = await repo.get_profile(callback.from_user.id) is None
+-        await repo.save_profile(callback.from_user.id, profile)
++        await repo.save_profile(callback.from_user.id, profile, accepted_at)
+         await repo.set_adjustments(callback.from_user.id, [])
+     logger.info("profile saved")
+     if is_new:  # editing the profile later is not a new onboarding
+@@ -210,6 +280,8 @@ async def on_goal(
+ def register(router: Router) -> None:
+     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
+     router.message.register(cmd_start, CommandStart())
++    router.callback_query.register(on_consent, F.data == "consent:ok")
++    router.message.register(on_consent_pending, Onboarding.consent, F.text, NOT_A_COMMAND)
+     router.callback_query.register(on_sex, Onboarding.sex, F.data.startswith("sex:"))
+     router.message.register(on_age, Onboarding.age, F.text, NOT_A_COMMAND)
+     router.message.register(on_height, Onboarding.height, F.text, NOT_A_COMMAND)
+diff --git a/src/nutrition_bot/handlers/states.py b/src/nutrition_bot/handlers/states.py
+index a886250..e8387f8 100644
+--- a/src/nutrition_bot/handlers/states.py
++++ b/src/nutrition_bot/handlers/states.py
+@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
+ class Onboarding(StatesGroup):
+     """Questions asked after /start."""
+ 
++    consent = State()
+     sex = State()
+     age = State()
+     height = State()
+diff --git a/src/nutrition_bot/texts.py b/src/nutrition_bot/texts.py
+index 4a52d5c..3c482b4 100644
+--- a/src/nutrition_bot/texts.py
++++ b/src/nutrition_bot/texts.py
+@@ -6,6 +6,8 @@ from nutrition_bot.core.slip import SlipOutcome
+ 
+ START = "Привет! Я Фоксела 🦊 Помогу составить питание без весов и без чувства вины."
+ DISCLAIMER = "Я не заменяю врача и не ставлю диагнозов. Я предназначена для взрослых (18+)."
++BTN_CONSENT = "Понятно, мне есть 18"
++CONSENT_REMINDER = "Чтобы начать, нажмите кнопку ниже: так я буду знать, что вы прочитали это 🙂"
+ 
+ # Messages after a day that differed from the plan. The tone is always calm and kind: no blame,
+ # no "you should", no punishment. Placeholders: {excess_kcal}, {per_day_kcal} (whole numbers).
+diff --git a/tests/integration/bot_harness.py b/tests/integration/bot_harness.py
+index ee91c91..faf274f 100644
+--- a/tests/integration/bot_harness.py
++++ b/tests/integration/bot_harness.py
+@@ -49,6 +49,20 @@ class MockedSession(BaseSession):
+                 },
+                 context={"bot": bot},
+             )
++        if isinstance(method, SendPhoto):
++            return Message.model_validate(
++                {
++                    "message_id": len(self.requests),
++                    "date": int(datetime.now(UTC).timestamp()),
++                    "chat": {"id": method.chat_id, "type": "private"},
++                    "caption": method.caption,
++                    "photo": [
++                        {"file_id": "small", "file_unique_id": "s", "width": 90, "height": 90},
++                        {"file_id": "FILE-ID", "file_unique_id": "b", "width": 800, "height": 800},
++                    ],
++                },
++                context={"bot": bot},
++            )
+         return True
+ 
+ 
+@@ -153,6 +167,7 @@ class BotHarness:
+     async def onboard(self, user_id: int = 1, goal: str = "lose") -> list[Reply]:
+         """The whole onboarding with typical answers; returns the final replies."""
+         await self.say("/start", user_id)
++        await self.press("consent:ok", user_id)
+         await self.press("sex:female", user_id)
+         await self.say("32", user_id)
+         await self.say("168", user_id)
+diff --git a/tests/integration/conftest.py b/tests/integration/conftest.py
+index 27830dc..eddf7d8 100644
+--- a/tests/integration/conftest.py
++++ b/tests/integration/conftest.py
+@@ -8,6 +8,7 @@ import pytest
+ 
+ from nutrition_bot.config import Settings
+ from nutrition_bot.core.menu import DishGenerator
++from nutrition_bot.handlers import onboarding
+ from nutrition_bot.handlers.guard import MenuGuard
+ from tests.integration.app_builder import bot_app
+ from tests.integration.bot_harness import BotHarness
+@@ -15,6 +16,12 @@ from tests.integration.bot_harness import BotHarness
+ AppFactory = Callable[..., Awaitable[BotHarness]]
+ 
+ 
++@pytest.fixture(autouse=True)
++def _forget_the_welcome_picture() -> None:
++    """The remembered ``file_id`` lives in the process; every test starts without it."""
++    onboarding._picture.file_id = None
++
++
+ @pytest.fixture
+ async def make_app(tmp_path: Path, settings: Settings) -> AsyncIterator[AppFactory]:
+     """Build bots on fresh SQLite files seeded with the real food data (own LLM and guard)."""
+diff --git a/tests/integration/test_db_and_migrations.py b/tests/integration/test_db_and_migrations.py
+index 5013fc0..61353a3 100644
+--- a/tests/integration/test_db_and_migrations.py
++++ b/tests/integration/test_db_and_migrations.py
+@@ -77,3 +77,28 @@ def test_models_and_migration_do_not_drift(tmp_path: Path, monkeypatch: pytest.M
+         diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+     engine.dispose()
+     assert diff == []
++
++
++def test_upgrading_keeps_existing_people_with_an_empty_confirmation(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """People saved before the disclaimer button stay, and are asked once on their next /start."""
++    import sqlite3
++
++    db_file = tmp_path / "old.db"
++    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file.as_posix()}")
++    cfg = alembic_config()
++    command.upgrade(cfg, "0003")
++    with sqlite3.connect(db_file) as conn:
++        conn.execute(
++            "INSERT INTO users (telegram_id, sex, age, height_cm, weight_kg, activity, goal,"
++            " pending_adjust, created_at) VALUES (7, 'male', 40, 180, 80, 'light', 'lose', '[]',"
++            " '2026-11-01 10:00:00')"
++        )
++    command.upgrade(cfg, "head")
++    with sqlite3.connect(db_file) as conn:
++        row = conn.execute("SELECT age, disclaimer_accepted_at FROM users").fetchone()
++    assert row == (40, None)
++    command.downgrade(cfg, "0003")
++    with sqlite3.connect(db_file) as conn:
++        assert conn.execute("SELECT age FROM users").fetchone() == (40,)
+diff --git a/tests/integration/test_handlers_flow.py b/tests/integration/test_handlers_flow.py
+index ded213f..80579fc 100644
+--- a/tests/integration/test_handlers_flow.py
++++ b/tests/integration/test_handlers_flow.py
+@@ -11,6 +11,7 @@ from nutrition_bot.config import Settings
+ from nutrition_bot.core.metrics import EventName
+ from nutrition_bot.core.models import ActivityLevel, Goal, Profile, Sex
+ from nutrition_bot.core.norms import calculate_daily_norm
++from nutrition_bot.db.models import UserORM
+ from nutrition_bot.db.repositories.events import EventRepository
+ from nutrition_bot.db.repositories.users import UserRepository
+ from nutrition_bot.logging_setup import setup_logging
+@@ -40,11 +41,81 @@ async def make_menu(app: BotHarness, days: int = 1, pantry: str | None = None) -
+ # ------------------------------------------------------------------ onboarding
+ 
+ 
+-async def test_start_shows_disclaimer_and_asks_sex(app: BotHarness) -> None:
++async def test_start_shows_disclaimer_and_waits_for_the_button(app: BotHarness) -> None:
+     replies = await app.say("/start")
++    assert len(replies) == 1
+     assert texts.DISCLAIMER in replies[0].text
++    assert replies[0].buttons == ("consent:ok",)
++    asked = await app.press("consent:ok")
++    assert asked[-1].text == texts.ASK_SEX
++    assert set(asked[-1].buttons) == {"sex:male", "sex:female"}
++
++
++async def test_questions_are_not_asked_before_the_button(app: BotHarness) -> None:
++    await app.say("/start")
++    replies = await app.say("32")
++    assert replies[-1].text == texts.CONSENT_REMINDER
++    assert replies[-1].buttons == ("consent:ok",)
++    assert await app.press("sex:female") == []  # the sex step is not open yet
++
++
++async def test_a_command_while_waiting_for_the_button_is_still_a_command(app: BotHarness) -> None:
++    await app.say("/start")
++    assert (await app.say("/menu"))[-1].text == texts.NEED_PROFILE
++
++
++async def test_the_confirmation_time_is_stored_with_the_profile(app: BotHarness) -> None:
++    await app.onboard()
++    async with app.session_factory() as session:
++        repo = UserRepository(session)
++        assert await repo.has_accepted_disclaimer(1)
++        user = await session.get(UserORM, 1)
++        assert user is not None
++        assert user.disclaimer_accepted_at is not None
++
++
++async def test_editing_the_profile_keeps_the_first_confirmation(app: BotHarness) -> None:
++    await app.onboard()
++    async with app.session_factory() as session:
++        first = (await session.get(UserORM, 1)).disclaimer_accepted_at  # type: ignore[union-attr]
++    await app.press("profile:edit")
++    await app.press("sex:female")
++    await app.say("33")
++    await app.say("168")
++    await app.say("64")
++    await app.press("act:light")
++    await app.press("goal:maintain")
++    async with app.session_factory() as session:
++        user = await session.get(UserORM, 1)
++        assert user is not None
++        assert user.disclaimer_accepted_at == first
++
++
++async def test_a_person_from_before_the_button_confirms_on_the_next_start(
++    app: BotHarness,
++) -> None:
++    await app.onboard()
++    async with app.session_factory() as session:
++        user = await session.get(UserORM, 1)
++        assert user is not None
++        user.disclaimer_accepted_at = None  # how people saved before this version look
++        await session.commit()
++    replies = await app.say("/start")
++    assert replies[-1].buttons == ("consent:ok",)
++    assert await stored_profile(app) == PROFILE  # nothing is asked again, nothing is lost
++    done = await app.press("consent:ok")
++    assert done[-1].text == texts.WELCOME_BACK
++    async with app.session_factory() as session:
++        assert await UserRepository(session).has_accepted_disclaimer(1)
++    assert (await app.say("/start"))[-1].text == texts.WELCOME_BACK  # not asked a second time
++
++
++async def test_the_button_pressed_after_a_restart_still_starts_the_questions(
++    app: BotHarness,
++) -> None:
++    # The conversation state lives in memory, so a restart forgets it; the button must still work.
++    replies = await app.press("consent:ok")
+     assert replies[-1].text == texts.ASK_SEX
+-    assert set(replies[-1].buttons) == {"sex:male", "sex:female"}
+ 
+ 
+ async def test_full_onboarding_saves_profile_and_shows_norm_from_code(
+@@ -60,6 +131,7 @@ async def test_full_onboarding_saves_profile_and_shows_norm_from_code(
+ @pytest.mark.parametrize("age", ["17", "5", "17 лет"])
+ async def test_minors_are_refused_and_nothing_is_stored(app: BotHarness, age: str) -> None:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press("sex:male")
+     replies = await app.say(age)
+     assert replies[-1].text == texts.UNDERAGE
+@@ -83,6 +155,7 @@ async def test_bad_numbers_are_asked_again(
+     app: BotHarness, step: str, answer: str, expected: str
+ ) -> None:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press("sex:female")
+     if step in ("height", "weight"):
+         await app.say("32")
+@@ -94,6 +167,7 @@ async def test_bad_numbers_are_asked_again(
+ 
+ async def test_numbers_accept_units_and_decimal_comma(app: BotHarness) -> None:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press("sex:male")
+     await app.say("40 лет")
+     await app.say("181 см")
+@@ -106,6 +180,7 @@ async def test_numbers_accept_units_and_decimal_comma(app: BotHarness) -> None:
+ 
+ async def test_command_in_the_middle_leaves_the_conversation(app: BotHarness) -> None:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press("sex:female")
+     replies = await app.say("/menu")
+     assert replies[-1].text == texts.NEED_PROFILE
+@@ -537,12 +612,14 @@ async def test_nothing_is_recorded_without_a_profile_or_without_a_menu(app: BotH
+     await app.say("/shopping")
+     assert await stored_events(app) == []
+     await app.say("/start")  # onboarding started but not finished
++    await app.press("consent:ok")
+     await app.press("sex:female")
+     assert await stored_events(app) == []
+ 
+ 
+ async def test_a_refused_minor_leaves_no_event(app: BotHarness) -> None:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press("sex:female")
+     assert (await app.say("15"))[-1].text == texts.UNDERAGE
+     assert await stored_events(app) == []
+diff --git a/tests/integration/test_navigation.py b/tests/integration/test_navigation.py
+index 49882f3..cd38b13 100644
+--- a/tests/integration/test_navigation.py
++++ b/tests/integration/test_navigation.py
+@@ -5,7 +5,7 @@ from pathlib import Path
+ import pytest
+ from aiogram.exceptions import TelegramBadRequest
+ from aiogram.methods import SendMessage, SendPhoto
+-from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
++from aiogram.types import FSInputFile, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
+ 
+ from nutrition_bot import texts
+ from nutrition_bot.config import WELCOME_IMAGE
+@@ -22,7 +22,8 @@ async def test_start_greets_with_a_picture_then_asks_the_first_question(app: Bot
+     assert replies[0].is_photo
+     assert replies[0].text == f"{texts.START}\n\n{texts.DISCLAIMER}"
+     assert len(replies[0].text) <= 1024  # a photo caption is limited
+-    assert replies[-1].text == texts.ASK_SEX
++    assert replies[0].buttons == ("consent:ok",)
++    assert (await app.press("consent:ok"))[-1].text == texts.ASK_SEX
+ 
+ 
+ async def test_greeting_falls_back_to_text_without_the_picture(
+@@ -32,7 +33,7 @@ async def test_greeting_falls_back_to_text_without_the_picture(
+     replies = await app.say("/start")
+     assert not replies[0].is_photo
+     assert texts.DISCLAIMER in replies[0].text
+-    assert replies[-1].text == texts.ASK_SEX
++    assert replies[0].buttons == ("consent:ok",)
+ 
+ 
+ async def test_greeting_falls_back_to_text_if_telegram_rejects_the_picture(
+@@ -45,7 +46,7 @@ async def test_greeting_falls_back_to_text_if_telegram_rejects_the_picture(
+     replies = await app.say("/start")
+     assert not replies[0].is_photo
+     assert texts.START in replies[0].text
+-    assert replies[-1].text == texts.ASK_SEX
++    assert replies[0].buttons == ("consent:ok",)
+ 
+ 
+ async def test_onboarding_sets_the_panel_just_before_the_result(app: BotHarness) -> None:
+@@ -111,3 +112,41 @@ async def test_deleting_the_data_removes_the_panel(app: BotHarness) -> None:
+     sent = [m for m in app.session.requests if isinstance(m, SendMessage)]
+     assert sent[-1].text == texts.DELETE_DONE
+     assert isinstance(sent[-1].reply_markup, ReplyKeyboardRemove)
++
++
++def _photo_requests(app: BotHarness) -> list[SendPhoto]:
++    return [r for r in app.session.requests if isinstance(r, SendPhoto)]
++
++
++async def test_the_picture_is_uploaded_once_and_then_sent_by_file_id(app: BotHarness) -> None:
++    await app.say("/start", user_id=1)
++    await app.say("/start", user_id=2)
++    first, second = _photo_requests(app)
++    assert isinstance(first.photo, FSInputFile)
++    assert second.photo == "FILE-ID"  # the id Telegram returned for the biggest size
++    assert second.caption == first.caption
++    assert second.reply_markup == first.reply_markup
++
++
++async def test_a_refused_file_id_is_forgotten_and_the_picture_uploaded_again(
++    app: BotHarness, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    await app.say("/start", user_id=1)
++    real = Message.answer_photo
++    calls = 0
++
++    async def stale_id(self: Message, photo: object, *args: object, **kwargs: object) -> Message:
++        nonlocal calls
++        calls += 1
++        if isinstance(photo, str):
++            raise TelegramBadRequest(method=SendPhoto(chat_id=1, photo="x"), message="wrong id")
++        return await real(self, photo, *args, **kwargs)  # type: ignore[arg-type]
++
++    monkeypatch.setattr(Message, "answer_photo", stale_id)
++    replies = await app.say("/start", user_id=2)
++    assert replies[0].is_photo
++    assert calls == 2  # the stale id was tried, then the file was uploaded
++    assert isinstance(_photo_requests(app)[-1].photo, FSInputFile)
++    monkeypatch.setattr(Message, "answer_photo", real)
++    await app.say("/start", user_id=3)
++    assert _photo_requests(app)[-1].photo == "FILE-ID"  # remembered again after the upload
+diff --git a/tests/integration/test_protection.py b/tests/integration/test_protection.py
+index 8031f49..d1d5a03 100644
+--- a/tests/integration/test_protection.py
++++ b/tests/integration/test_protection.py
+@@ -25,6 +25,7 @@ async def onboard_as(
+     app: BotHarness, sex: str, age: str, height: str, weight: str, activity: str, goal: str
+ ) -> list[Reply]:
+     await app.say("/start")
++    await app.press("consent:ok")
+     await app.press(f"sex:{sex}")
+     await app.say(age)
+     await app.say(height)
+diff --git a/tests/render_examples.py b/tests/render_examples.py
+index 8336eab..911abb0 100644
+--- a/tests/render_examples.py
++++ b/tests/render_examples.py
+@@ -98,6 +98,7 @@ class Transcript:
+ async def onboarding(app: BotHarness) -> str:
+     t = Transcript(app)
+     await t.say("/start")
++    await t.press("consent:ok")
+     await t.press("sex:female")
+     await t.say("32")
+     await t.say("168")

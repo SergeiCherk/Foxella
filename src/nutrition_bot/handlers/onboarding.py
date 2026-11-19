@@ -2,12 +2,13 @@
 
 import logging
 import re
+from datetime import UTC, datetime
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot import texts
@@ -35,8 +36,28 @@ def parse_number(text: str) -> float | None:
     return float(match.group(1).replace(",", ".")) if match else None
 
 
+def _parse_time(value: object) -> datetime | None:
+    """The time stored in the conversation data; ``None`` if it is missing or damaged."""
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
 def _fmt(value: float) -> str:
     return str(int(value)) if value == int(value) else str(value).replace(".", ",")
+
+
+class _PictureCache:
+    """The Telegram ``file_id`` of the greeting picture, so it is uploaded once per run.
+
+    Kept in memory: after a restart the picture is uploaded once more and remembered again.
+    """
+
+    file_id: str | None = None
+
+
+_picture = _PictureCache()
 
 
 async def begin_onboarding(message: Message, state: FSMContext) -> None:
@@ -46,31 +67,79 @@ async def begin_onboarding(message: Message, state: FSMContext) -> None:
     await message.answer(texts.ASK_SEX, reply_markup=keyboards.sex_keyboard())
 
 
-async def send_greeting(message: Message) -> None:
-    """The greeting picture with the first words; plain text if the picture cannot be sent."""
-    caption = f"{texts.START}\n\n{texts.DISCLAIMER}"
-    if WELCOME_IMAGE.is_file():
+async def _send_picture(message: Message, caption: str, markup: InlineKeyboardMarkup) -> bool:
+    """Send the greeting picture (by ``file_id`` when known). ``False`` if it cannot be sent."""
+    if _picture.file_id is not None:
         try:
-            await message.answer_photo(FSInputFile(WELCOME_IMAGE), caption=caption)
-            return
+            await message.answer_photo(_picture.file_id, caption=caption, reply_markup=markup)
+            return True
         except TelegramAPIError:
-            logger.warning("welcome picture could not be sent")
-    await message.answer(caption)
+            logger.warning("the remembered welcome picture was refused, uploading it again")
+            _picture.file_id = None
+    if not WELCOME_IMAGE.is_file():
+        return False
+    try:
+        sent = await message.answer_photo(
+            FSInputFile(WELCOME_IMAGE), caption=caption, reply_markup=markup
+        )
+    except TelegramAPIError:
+        logger.warning("welcome picture could not be sent")
+        return False
+    if isinstance(sent, Message) and sent.photo:
+        _picture.file_id = sent.photo[-1].file_id
+    return True
+
+
+async def send_greeting(message: Message, markup: InlineKeyboardMarkup) -> None:
+    """The greeting picture with the first words and the "Понятно" button; text if no picture."""
+    caption = f"{texts.START}\n\n{texts.DISCLAIMER}"
+    if not await _send_picture(message, caption, markup):
+        await message.answer(caption, reply_markup=markup)
 
 
 async def cmd_start(message: Message, state: FSMContext, session_factory: SessionFactory) -> None:
-    """Greet, show the disclaimer and start onboarding for a new person."""
+    """Greet and ask to confirm the disclaimer; known people who already did go straight back."""
     await state.clear()
     user_id = sender_id(message)
     if user_id is None:
         return
     async with session_factory() as session:
-        known = await UserRepository(session).get_profile(user_id) is not None
-    await send_greeting(message)
-    if known:
+        repo = UserRepository(session)
+        known = await repo.get_profile(user_id) is not None
+        accepted = known and await repo.has_accepted_disclaimer(user_id)
+    if accepted:
+        await send_greeting(message, InlineKeyboardMarkup(inline_keyboard=[]))
         await message.answer(texts.WELCOME_BACK, reply_markup=keyboards.main_keyboard())
-    else:
-        await begin_onboarding(message, state)
+        return
+    await state.set_state(Onboarding.consent)
+    await send_greeting(message, keyboards.consent_keyboard())
+
+
+async def on_consent(
+    callback: CallbackQuery, state: FSMContext, session_factory: SessionFactory
+) -> None:
+    """ "Понятно" pressed: remember it, then start the questions (or welcome the person back)."""
+    message = callback_message(callback)
+    await callback.answer()
+    if message is None:
+        return
+    user_id = callback.from_user.id
+    async with session_factory() as session:
+        repo = UserRepository(session)
+        if await repo.get_profile(user_id) is not None:
+            await repo.accept_disclaimer(user_id)
+            await state.clear()
+            await message.answer(texts.WELCOME_BACK, reply_markup=keyboards.main_keyboard())
+            return
+    await state.clear()
+    await state.update_data(accepted_at=datetime.now(UTC).isoformat())
+    await state.set_state(Onboarding.sex)
+    await message.answer(texts.ASK_SEX, reply_markup=keyboards.sex_keyboard())
+
+
+async def on_consent_pending(message: Message) -> None:
+    """Any text while the disclaimer is not confirmed: ask for the button again."""
+    await message.answer(texts.CONSENT_REMINDER, reply_markup=keyboards.consent_keyboard())
 
 
 async def on_sex(callback: CallbackQuery, state: FSMContext) -> None:
@@ -168,6 +237,7 @@ async def on_goal(
         return
     data = await state.get_data()
     await state.clear()
+    accepted_at = _parse_time(data.get("accepted_at"))
     try:
         profile = Profile(
             sex=Sex(data["sex"]),
@@ -187,7 +257,7 @@ async def on_goal(
     async with session_factory() as session:
         repo = UserRepository(session)
         is_new = await repo.get_profile(callback.from_user.id) is None
-        await repo.save_profile(callback.from_user.id, profile)
+        await repo.save_profile(callback.from_user.id, profile, accepted_at)
         await repo.set_adjustments(callback.from_user.id, [])
     logger.info("profile saved")
     if is_new:  # editing the profile later is not a new onboarding
@@ -210,6 +280,8 @@ async def on_goal(
 def register(router: Router) -> None:
     """Attach this module's handlers to ``router`` (a fresh router for every dispatcher)."""
     router.message.register(cmd_start, CommandStart())
+    router.callback_query.register(on_consent, F.data == "consent:ok")
+    router.message.register(on_consent_pending, Onboarding.consent, F.text, NOT_A_COMMAND)
     router.callback_query.register(on_sex, Onboarding.sex, F.data.startswith("sex:"))
     router.message.register(on_age, Onboarding.age, F.text, NOT_A_COMMAND)
     router.message.register(on_height, Onboarding.height, F.text, NOT_A_COMMAND)

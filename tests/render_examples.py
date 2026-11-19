@@ -98,6 +98,7 @@ class Transcript:
 async def onboarding(app: BotHarness) -> str:
     t = Transcript(app)
     await t.say("/start")
+    await t.press("consent:ok")
     await t.press("sex:female")
     await t.say("32")
     await t.say("168")
