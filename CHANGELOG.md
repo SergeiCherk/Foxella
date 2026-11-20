@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Docker: uv 0.12 (the version that wrote uv.lock), only the image's own Python, scripts in
+  the image, logs capped at 3 x 10 MB. Server guide `docs/deploy.md`, backups
+  `scripts/backup_db.sh`.
+- Conversations in progress are kept in the database (`db/fsm_storage.py`, table
+  `fsm_states`, migration `0007`) instead of memory: after a restart people go on from the
+  same step. A finished conversation is deleted at once, an unfinished one after 24 hours.
 - A menu day is first asked for in one call (`MenuConfig.day_requests`); each meal is checked
   on its own and only failing meals are asked again one by one, with their problems. A day
   took 2 calls and 18 s on Qwen3.8 Flash instead of 4+.

@@ -13,7 +13,7 @@ from nutrition_bot.db.session import create_engine, create_session_factory
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_TABLES = {"foods", "food_aliases", "measures"}
-USER_TABLES = {"users", "user_foods", "user_menus", "user_events"}
+USER_TABLES = {"users", "user_foods", "user_menus", "user_events", "fsm_states"}
 ALL_TABLES = CATALOG_TABLES | USER_TABLES
 
 
