@@ -25,7 +25,7 @@ Telegram-бот «Питание без весов». Фоксела счита�
 <table>
   <tr>
     <td align="center" valign="top"><img src="docs/images/01-norma.png" width="260" alt="Норма калорий и БЖУ после анкеты"><br><sub>Норма на день</sub></td>
-    <td align="center" valign="top"><img src="docs/images/02-menu.png" width="260" alt="Обед и перекус в бытовых мерах со свёрнутыми рецептами"><br><sub>Меню без весов</sub></td>
+    <td align="center" valign="top"><img src="docs/images/02-menu.png" width="260" alt="Обед из трёх блюд в бытовых мерах со свёрнутыми рецептами"><br><sub>Меню без весов</sub></td>
     <td align="center" valign="top"><img src="docs/images/03-pokupki.png" width="260" alt="Список покупок по разделам магазина"><br><sub>Список покупок</sub></td>
   </tr>
   <tr>
