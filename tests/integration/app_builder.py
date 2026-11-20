@@ -7,6 +7,7 @@ from pathlib import Path
 from nutrition_bot.bot import build_dispatcher, create_bot
 from nutrition_bot.config import Settings
 from nutrition_bot.core.menu import DishGenerator
+from nutrition_bot.db.fsm_storage import SqlStorage
 from nutrition_bot.db.models import Base
 from nutrition_bot.db.repositories.foods import FoodRepository
 from nutrition_bot.db.seed import load_foods, load_measures
@@ -48,6 +49,7 @@ async def bot_app(
             FoodParser(aliases, settings.parser),
             guard=guard or MenuGuard(0.0),
             mentions=AliasMentionFinder(aliases),
+            storage=SqlStorage(session_factory),
         )
         bot = create_bot("123456:TEST-TOKEN", session=MockedSession())
         yield BotHarness(dispatcher, bot, session_factory, catalog)

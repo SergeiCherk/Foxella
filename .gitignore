@@ -31,3 +31,4 @@ data/usda/
 .idea/
 .DS_Store
 Thumbs.db
+backups/

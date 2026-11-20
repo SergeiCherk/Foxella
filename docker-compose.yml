@@ -7,6 +7,12 @@ services:
     volumes:
       - bot_data:/app/storage
     restart: unless-stopped
+    # Docker keeps logs forever by default; three files of 10 MB are plenty for a bot.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   bot_data:

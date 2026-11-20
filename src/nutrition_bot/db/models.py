@@ -152,6 +152,22 @@ class MenuORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class FsmStateORM(Base):
+    """A conversation in progress (aiogram FSM): state and its data, gone when it ends.
+
+    Not linked to ``users``: the questionnaire runs before there is a user row. Rows older
+    than a day are ignored and deleted (see ``db.fsm_storage``).
+    """
+
+    __tablename__ = "fsm_states"
+
+    key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    data: Mapped[str] = mapped_column(Text, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class UserEventORM(Base):
     """One usage event of a user for the beta statistics: a fixed name and a time, no text."""
 

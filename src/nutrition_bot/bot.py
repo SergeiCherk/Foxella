@@ -8,6 +8,7 @@ from typing import Any
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 from alembic import command
@@ -19,6 +20,7 @@ from nutrition_bot.config import PROJECT_ROOT, Settings
 from nutrition_bot.core.measures import Catalog
 from nutrition_bot.core.menu import DishGenerator
 from nutrition_bot.core.recipe_check import MentionFinder
+from nutrition_bot.db.fsm_storage import SqlStorage
 from nutrition_bot.db.repositories.foods import FoodRepository
 from nutrition_bot.db.seed import load_foods, load_measures
 from nutrition_bot.db.session import create_engine, create_session_factory
@@ -40,15 +42,17 @@ def build_dispatcher(
     guard: MenuGuard | None = None,
     mentions: MentionFinder | None = None,
     eaten_guard: MenuGuard | None = None,
+    storage: BaseStorage | None = None,
 ) -> Dispatcher:
     """Create the dispatcher; its keyword arguments are what handlers receive by name.
 
     ``mentions`` finds foods in the model's recipe texts (hidden calories, amounts); without it
     recipes get only the plain text checks. ``eaten_guard`` limits how often one person's
-    unknown food is sent to the model in "I ate".
+    unknown food is sent to the model in "I ate". ``storage`` keeps conversations in progress;
+    the bot passes ``SqlStorage`` so they survive a restart (``MemoryStorage`` if omitted).
     """
     dispatcher = Dispatcher(
-        storage=MemoryStorage(),
+        storage=storage or MemoryStorage(),
         settings=settings,
         session_factory=session_factory,
         catalog=catalog,
@@ -95,7 +99,13 @@ async def run(settings: Settings) -> None:
     llm = build_llm(settings, catalog)
     bot = create_bot(token)
     dispatcher = build_dispatcher(
-        settings, session_factory, catalog, llm, parser, mentions=AliasMentionFinder(aliases)
+        settings,
+        session_factory,
+        catalog,
+        llm,
+        parser,
+        mentions=AliasMentionFinder(aliases),
+        storage=SqlStorage(session_factory),
     )
     try:
         # Inside the try block: if Telegram is unreachable here, the session is still closed.
