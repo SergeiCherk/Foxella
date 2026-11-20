@@ -96,9 +96,9 @@ def test_a_more_specific_alias_wins_over_a_general_one() -> None:
 
 
 def test_unknown_phrases_are_reported_not_invented() -> None:
-    result = PARSER.parse("гречка, пицца, ")
+    result = PARSER.parse("гречка, бетон, ")
     assert codes(result.items) == ["buckwheat_raw"]
-    assert result.unknown == ["пицца"]
+    assert result.unknown == ["бетон"]
 
 
 @pytest.mark.parametrize("text", ["", "   ", ",,,", "!!!", "12345", "а"])
@@ -142,3 +142,63 @@ def test_choose_measure_prefers_the_named_one() -> None:
     assert choose_measure([], frozenset({"кусок"})) is None
     two_words = [Measure(5, 1, "столовая ложка", 15.0)]
     assert choose_measure(two_words, frozenset({"ложка"})) == two_words[0]
+
+
+# ---- ready dishes and phrases with "с"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("борщ", ["borscht"]),
+        ("тарелка борща", ["borscht"]),
+        ("пельмени", ["pelmeni"]),
+        ("2 куска пиццы", ["pizza_cheese"]),
+        ("шаурма", ["shawarma"]),
+        ("бургер", ["hamburger"]),
+        ("картошка фри", ["french_fries"]),
+        ("жареная картошка", ["fried_potato"]),
+        ("макароны по-флотски", ["navy_pasta"]),
+        ("селёдка под шубой", ["herring_under_fur"]),
+        ("доширак", ["instant_noodles"]),
+        ("бутылка пива", ["beer"]),
+        ("чай", ["tea"]),
+    ],
+)
+def test_ready_dishes_are_recognised(text: str, expected: list[str]) -> None:
+    result = PARSER.parse(text)
+    assert codes(result.items) == expected
+    assert not result.unknown
+
+
+def test_joiners_inside_an_alias_do_not_break_it() -> None:
+    assert codes(PARSER.parse("овсянка на молоке").items) == ["oatmeal_milk"]
+    assert codes(PARSER.parse("вареники с творогом").items) == ["vareniki_cottage"]
+    assert codes(PARSER.parse("макароны с фаршем").items) == ["navy_pasta"]
+
+
+def test_with_joins_two_foods_unless_the_phrase_is_one_alias() -> None:
+    result = PARSER.parse("тарелка борща со сметаной")
+    assert codes(result.items) == ["borscht"]
+    assert [CATALOG.get_food(i).code for i in result.ambiguous[0].food_ids] == [
+        "sour_cream_15",
+        "sour_cream_20",
+    ]
+    assert codes(PARSER.parse("3 блина со сгущёнкой").items) == ["bliny", "condensed_milk"]
+    first, second = PARSER.parse("3 блина со сгущёнкой").items
+    assert (first.quantity, second.quantity) == (3, 1)  # the number belongs to the first food
+
+
+def test_number_words_in_any_case() -> None:
+    (item,) = PARSER.parse("яичница из двух яиц").items
+    assert (CATALOG.get_food(item.food_id).code, item.quantity) == ("fried_eggs", 2)
+    assert "яйцо" in item.words  # the measure: two eggs, not two portions
+    assert PARSER.parse("трёх пельменей").items[0].quantity == 3
+
+
+def test_a_dish_with_several_kinds_asks_which() -> None:
+    (choice,) = PARSER.parse("вареники").ambiguous
+    assert {CATALOG.get_food(i).code for i in choice.food_ids} == {
+        "vareniki_potato",
+        "vareniki_cottage",
+    }

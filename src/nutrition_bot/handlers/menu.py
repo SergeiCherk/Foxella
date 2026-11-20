@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from nutrition_bot import texts
 from nutrition_bot.config import Settings
 from nutrition_bot.core.balance import BalanceHint, analyze_day, pantry_hints
+from nutrition_bot.core.diet import forbidden_food_ids
 from nutrition_bot.core.errors import NutritionError
 from nutrition_bot.core.measures import Catalog
 from nutrition_bot.core.menu import (
     DishGenerator,
+    DishRules,
     MealSource,
     build_menu,
     menu_food_ids,
@@ -26,6 +28,7 @@ from nutrition_bot.core.menu import (
 )
 from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.norms import calculate_daily_norm
+from nutrition_bot.core.recipe_check import MentionFinder
 from nutrition_bot.db.repositories.users import UserRepository
 from nutrition_bot.handlers import keyboards
 from nutrition_bot.handlers.common import (
@@ -115,6 +118,7 @@ async def on_pantry_button(
     catalog: Catalog,
     llm: DishGenerator,
     guard: MenuGuard,
+    mentions: MentionFinder | None,
 ) -> None:
     """ "Any products" or "same as last time"."""
     message = callback_message(callback)
@@ -128,7 +132,15 @@ async def on_pantry_button(
             pantry = await UserRepository(session).get_pantry(callback.from_user.id)
     await state.update_data(selected=[{"food_id": i} for i in pantry], queue=[])
     await _finish(
-        message, callback.from_user.id, state, session_factory, settings, catalog, llm, guard
+        message,
+        callback.from_user.id,
+        state,
+        session_factory,
+        settings,
+        catalog,
+        llm,
+        guard,
+        mentions,
     )
 
 
@@ -141,6 +153,7 @@ async def on_products_text(
     llm: DishGenerator,
     guard: MenuGuard,
     parser: FoodParser,
+    mentions: MentionFinder | None,
 ) -> None:
     """Free-text list of products."""
     user_id = sender_id(message)
@@ -156,7 +169,7 @@ async def on_products_text(
         await message.answer(texts.MENU_PRODUCTS_AGAIN)
         return
     await state.update_data(selected=sure, queue=questions)
-    await _next(message, user_id, state, session_factory, settings, catalog, llm, guard)
+    await _next(message, user_id, state, session_factory, settings, catalog, llm, guard, mentions)
 
 
 async def on_pick(
@@ -167,6 +180,7 @@ async def on_pick(
     catalog: Catalog,
     llm: DishGenerator,
     guard: MenuGuard,
+    mentions: MentionFinder | None,
 ) -> None:
     """An answer to a clarifying question."""
     message = callback_message(callback)
@@ -181,7 +195,15 @@ async def on_pick(
         return
     await state.update_data(selected=sure, queue=questions)
     await _next(
-        message, callback.from_user.id, state, session_factory, settings, catalog, llm, guard
+        message,
+        callback.from_user.id,
+        state,
+        session_factory,
+        settings,
+        catalog,
+        llm,
+        guard,
+        mentions,
     )
 
 
@@ -194,12 +216,15 @@ async def _next(
     catalog: Catalog,
     llm: DishGenerator,
     guard: MenuGuard,
+    mentions: MentionFinder | None,
 ) -> None:
     """Ask the next question, or build the menu when nothing is left to clarify."""
     data = await state.get_data()
     questions = data.get("queue", [])
     if not questions:
-        await _finish(message, user_id, state, session_factory, settings, catalog, llm, guard)
+        await _finish(
+            message, user_id, state, session_factory, settings, catalog, llm, guard, mentions
+        )
         return
     await state.set_state(MenuFlow.clarify)
     question = questions[0]
@@ -220,6 +245,7 @@ async def _finish(
     catalog: Catalog,
     llm: DishGenerator,
     guard: MenuGuard,
+    mentions: MentionFinder | None,
 ) -> None:
     """Build and send the menu, unless this user is already building one or just finished."""
     verdict = guard.acquire(user_id)
@@ -237,7 +263,9 @@ async def _finish(
     )
     try:
         async with typing:
-            await _build_and_send(message, user_id, state, session_factory, settings, catalog, llm)
+            await _build_and_send(
+                message, user_id, state, session_factory, settings, catalog, llm, mentions
+            )
     finally:
         guard.release(user_id)
 
@@ -250,6 +278,7 @@ async def _build_and_send(
     settings: Settings,
     catalog: Catalog,
     llm: DishGenerator,
+    mentions: MentionFinder | None,
 ) -> None:
     data: dict[str, Any] = await state.get_data()
     await state.clear()
@@ -259,18 +288,28 @@ async def _build_and_send(
         repo = UserRepository(session)
         profile = await repo.get_profile(user_id)
         adjustments = await repo.get_adjustments(user_id)
+        restrictions = await repo.get_restrictions(user_id)
     if profile is None:
         await message.answer(texts.NEED_PROFILE)
         return
     norm = calculate_daily_norm(profile, settings.norms)
+    forbidden = forbidden_food_ids(catalog, restrictions, settings.diet)
+    removed = [i for i in pantry if i in forbidden]
+    if removed:
+        names = ", ".join(catalog.get_food(i).name_ru for i in removed)
+        await message.answer(texts.MENU_RESTRICTED_NOTE.format(items=html_text(names)))
+    usable = [i for i in pantry if i not in forbidden]
     await message.answer(texts.MENU_WORKING)
     try:
         staples = staple_food_ids(catalog, settings.menu.staple_codes)
-        allowed = menu_food_ids(catalog, pantry or None, staples)
-        results = await build_menu(llm, catalog, norm, days, allowed, settings.menu, adjustments)
+        allowed = menu_food_ids(catalog, usable or None, staples, forbidden)
+        rules = DishRules(mentions, forbidden)
+        results = await build_menu(
+            llm, catalog, norm, days, allowed, settings.menu, adjustments, rules
+        )
     except NutritionError:
         logger.exception("menu could not be built")
-        await message.answer(texts.MENU_EMPTY)
+        await message.answer(texts.MENU_EMPTY_RESTRICTED if forbidden else texts.MENU_EMPTY)
         return
     menu = [[r.meal for r in day] for day in results]
     async with session_factory() as session:

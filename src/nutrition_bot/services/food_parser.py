@@ -36,6 +36,8 @@ _WORD_NUMBERS = {
 }
 # Words that carry no meaning for matching (units written after a number, small joiners).
 _NOISE = {"шт", "штука", "x", "х", "с", "со", "из", "на", "в"}
+# "гречка с курицей" is two foods, unless the whole phrase is one alias ("кофе с молоком").
+_WITH = re.compile(r"\s+(?:с|со)\s+")
 
 
 @lru_cache(maxsize=1)
@@ -93,7 +95,8 @@ def _number(token: str) -> float | None:
         return float(Fraction(int(top), int(bottom))) if int(bottom) else None
     if token[0].isdigit():
         return float(token.replace(",", "."))
-    return _WORD_NUMBERS.get(token)
+    # "из двух яиц": number words in any case
+    return _WORD_NUMBERS.get(token, _WORD_NUMBERS.get(lemma(token)) if token.isalpha() else None)
 
 
 class FoodParser:
@@ -104,7 +107,8 @@ class FoodParser:
         self._index: dict[tuple[str, ...], list[int]] = {}
         self._written: dict[str, tuple[str, ...]] = {}  # alias as written -> its lemma key
         for alias, food_ids in aliases.items():
-            key = _lemmas(alias)
+            # joiners are dropped from the phrase, so from the alias too ("овсянка на молоке")
+            key = tuple(w for w in _lemmas(alias) if w not in _NOISE)
             if key:
                 bucket = self._index.setdefault(key, [])
                 bucket.extend(i for i in food_ids if i not in bucket)
@@ -121,17 +125,34 @@ class FoodParser:
         return result
 
     def _parse_chunk(self, chunk: str, result: ParseResult) -> None:
-        quantity = self._cfg.default_quantity
-        found_quantity = False
+        """One item, or several joined by "с": "борщ со сметаной" is borscht and sour cream."""
+        parts = [p for p in _WITH.split(chunk) if p.strip()]
+        if len(parts) > 1:
+            key = self._exact(self._read(chunk)[1])
+            first = set(self._read(parts[0])[1])
+            if key is None or not (set(key) & first and set(key) - first):
+                for part in parts:
+                    self._parse_one(part, result)
+                return
+        self._parse_one(chunk, result)
+
+    def _read(self, chunk: str) -> tuple[float | None, list[str], list[str]]:
+        """The first number of a phrase and its meaningful words (lemmas and as typed)."""
+        quantity: float | None = None
         lemmas: list[str] = []
         written: list[str] = []
         for token in _TOKEN.findall(_norm(chunk)):
             number = _number(token)
-            if number is not None and not found_quantity:
-                quantity, found_quantity = number, True
+            if number is not None and quantity is None:
+                quantity = number
             elif number is None and token[0].isalpha() and token not in _NOISE:
                 lemmas.append(lemma(token))
                 written.append(token)
+        return quantity, lemmas, written
+
+    def _parse_one(self, chunk: str, result: ParseResult) -> None:
+        number, lemmas, written = self._read(chunk)
+        quantity = self._cfg.default_quantity if number is None else number
         key = self._match(lemmas, written)
         if key is None:
             result.unknown.append(chunk[:60])
@@ -144,17 +165,24 @@ class FoodParser:
         else:
             result.ambiguous.append(Ambiguity(chunk[:60], tuple(food_ids), quantity, words))
 
+    def _exact(self, lemmas: list[str]) -> tuple[str, ...] | None:
+        """The longest alias that appears in the phrase as consecutive words."""
+        for size in range(min(len(lemmas), self._max_len), 0, -1):
+            for start in range(len(lemmas) - size + 1):
+                window = tuple(lemmas[start : start + size])
+                if window in self._index:
+                    return window
+        return None
+
     def _match(self, lemmas: list[str], written: list[str]) -> tuple[str, ...] | None:
         """The longest alias that appears in the phrase as consecutive words, else a fuzzy one.
 
         The fuzzy step compares both the dictionary forms and the words as typed: the
         lemmatizer guesses badly on misspelled words, the typed form does not.
         """
-        for size in range(min(len(lemmas), self._max_len), 0, -1):
-            for start in range(len(lemmas) - size + 1):
-                window = tuple(lemmas[start : start + size])
-                if window in self._index:
-                    return window
+        exact = self._exact(lemmas)
+        if exact is not None:
+            return exact
         candidates = (
             (" ".join(lemmas), self._joined),
             (" ".join(written), self._written),

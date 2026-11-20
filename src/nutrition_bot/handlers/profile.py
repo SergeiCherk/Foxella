@@ -10,12 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot import texts
 from nutrition_bot.config import Settings
+from nutrition_bot.core.diet import known_restrictions
 from nutrition_bot.core.norms import calculate_daily_norm
 from nutrition_bot.db.repositories.users import UserRepository
 from nutrition_bot.handlers import keyboards
 from nutrition_bot.handlers.common import callback_message, low_kcal_note, sender_id
 from nutrition_bot.handlers.onboarding import begin_onboarding
 from nutrition_bot.handlers.render import plural
+from nutrition_bot.handlers.restrictions import restrictions_phrase
 
 logger = logging.getLogger(__name__)
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -26,7 +28,9 @@ async def show_profile(
 ) -> None:
     """Show the saved data and the norm, or ask to get acquainted first."""
     async with session_factory() as session:
-        profile = await UserRepository(session).get_profile(user_id)
+        repo = UserRepository(session)
+        profile = await repo.get_profile(user_id)
+        restrictions = known_restrictions(await repo.get_restrictions(user_id), settings.diet)
     if profile is None:
         await target.answer(texts.NEED_PROFILE)
         return
@@ -45,6 +49,11 @@ async def show_profile(
             protein=round(norm.protein_g),
             fat=round(norm.fat_g),
             carb=round(norm.carb_g),
+        )
+        + (
+            texts.PROFILE_RESTRICTIONS.format(items=restrictions_phrase(restrictions))
+            if restrictions
+            else ""
         )
         + (f"\n\n{note}" if note else ""),
         reply_markup=keyboards.profile_keyboard(profile.goal),

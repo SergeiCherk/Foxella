@@ -21,6 +21,8 @@ MEASURES_CSV = DATA_DIR / "measures.csv"
 MACRO_SUM_TOLERANCE_G = 0.5  # protein + fat + carbs may not exceed 100 g by more than this
 ATWATER_MIN_TOLERANCE_KCAL = 20.0  # kcal vs 4P + 4C + 9F: absolute slack ...
 ATWATER_REL_TOLERANCE = 0.12  # ... or this share of the Atwater value, whichever is larger
+# Alcohol gives 7 kcal/g and is not a macro, so drinks cannot match 4P + 4C + 9F.
+ATWATER_EXEMPT = frozenset({"beer", "wine_red", "wine_white", "vodka"})
 MAX_YIELD_FACTOR = 8.0  # cooked grams per raw gram (oats absorb the most water)
 ENERGY_RATIO_RANGE = (0.75, 1.25)  # kcal_cooked * yield / kcal_raw must stay in this range
 MAX_MEASURE_GRAMS = 1000.0
@@ -145,7 +147,7 @@ def _check_food(food: FoodRow, by_code: dict[str, FoodRow]) -> list[str]:
 
     atwater = 4 * food.protein_100 + 4 * food.carb_100 + 9 * food.fat_100
     slack = max(ATWATER_MIN_TOLERANCE_KCAL, ATWATER_REL_TOLERANCE * atwater)
-    if abs(food.kcal_100 - atwater) > slack:
+    if food.code not in ATWATER_EXEMPT and abs(food.kcal_100 - atwater) > slack:
         problems.append(f"{who}: kcal {food.kcal_100} does not match macros (about {atwater:.0f})")
 
     if food.state == "cooked":

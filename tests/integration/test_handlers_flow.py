@@ -125,7 +125,7 @@ async def test_full_onboarding_saves_profile_and_shows_norm_from_code(
     assert await stored_profile(app) == PROFILE
     target = calculate_daily_norm(PROFILE, settings.norms).target
     assert f"{round(target.kcal)} ккал" in replies[-1].text
-    assert replies[-1].buttons == ("menu:start", "goalcheck:start")  # lose: term check offered
+    assert replies[-1].buttons == ("menu:start", "goalcheck:start", "diet:show")  # lose
 
 
 @pytest.mark.parametrize("age", ["17", "5", "17 лет"])
@@ -283,8 +283,8 @@ async def test_unknown_products_are_named_and_skipped(app: BotHarness) -> None:
     await app.onboard()
     await app.say("/menu")
     await app.press("days:1")
-    replies = await app.say("гречка, пицца")
-    assert "пицца" in replies[0].text
+    replies = await app.say("гречка, бетон")
+    assert "бетон" in replies[0].text
     assert "День 1" in joined(replies)
 
 
@@ -442,6 +442,18 @@ async def test_slip_with_a_list_of_foods_is_confirmed_before_counting(app: BotHa
         assert await UserRepository(session).get_adjustments(1) is not None
 
 
+async def test_slip_understands_ready_dishes_and_their_measures(app: BotHarness) -> None:
+    await app.onboard()
+    await app.say("/slip")
+    replies = await app.say("тарелка борща, 2 куска пиццы и банка колы")
+    text = replies[-1].text
+    assert "Борщ — <b>1 тарелка</b>" in text
+    assert "Пицца с сыром — <b>2 куска</b>" in text
+    assert "Кола — <b>1 банка</b>" in text
+    # 300 g borscht + 220 g pizza + 330 g cola, computed from the catalog
+    assert "ккал сверх плана" in text
+
+
 async def test_slip_redo_asks_again(app: BotHarness) -> None:
     await app.onboard()
     await app.say("/slip")
@@ -453,7 +465,7 @@ async def test_slip_redo_asks_again(app: BotHarness) -> None:
 async def test_slip_unknown_food_offers_rough_sizes(app: BotHarness) -> None:
     await app.onboard()
     await app.say("/slip")
-    replies = await app.say("пицца")
+    replies = await app.say("бетон")
     assert texts.SLIP_NOTHING in replies[-1].text
     assert "slipq:large" in replies[-1].buttons
 
@@ -492,7 +504,7 @@ async def test_profile_view_and_edit(app: BotHarness, settings: Settings) -> Non
     assert "168" in replies[-1].text
     assert "64,5" in replies[-1].text
     assert str(round(calculate_daily_norm(PROFILE, settings.norms).target.kcal)) in replies[-1].text
-    assert set(replies[-1].buttons) == {"profile:edit", "goalcheck:start", "del:ask"}  # lose goal
+    assert set(replies[-1].buttons) == {"profile:edit", "goalcheck:start", "diet:show", "del:ask"}
     assert (await app.press("profile:edit"))[-1].text == texts.ASK_SEX
 
 
@@ -668,8 +680,8 @@ async def test_typed_html_in_products_is_shown_escaped(app: BotHarness) -> None:
     await app.onboard()
     await app.say("/menu")
     await app.press("days:1")
-    replies = await app.say("гречка, <b>пицца</b> & кола")
-    assert "&lt;b&gt;пицца&lt;/b&gt; &amp; кола" in replies[0].text
+    replies = await app.say("гречка, <b>бетон</b> & щебень")
+    assert "&lt;b&gt;бетон&lt;/b&gt; &amp; щебень" in replies[0].text
     assert "День 1" in joined(replies)
 
 

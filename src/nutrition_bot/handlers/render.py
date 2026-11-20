@@ -1,6 +1,6 @@
 """Turning core results into Russian messages. Pure functions, easy to test.
 
-Quantities are shown in household measures only ("2 половника", "½ стакана"); grams never
+Quantities are shown in household measures only ("2 половника", "полстакана"); grams never
 appear. Nutrients shown to the user are the ones computed by code.
 """
 
@@ -19,7 +19,6 @@ from nutrition_bot.core.nutrition import day_nutrients, dish_nutrients, meal_nut
 from nutrition_bot.core.shopping import ShoppingItem
 
 TELEGRAM_LIMIT = 4000  # a message may hold 4096 characters; keep a margin
-_FRACTIONS = {0.25: "¼", 0.5: "½", 0.75: "¾"}
 _FEW = {2, 3, 4}
 MAX_RECIPE_CHARS = 700  # a recipe longer than this is cut, so one meal always fits a message
 
@@ -30,19 +29,19 @@ def _morph() -> pymorphy3.MorphAnalyzer:
 
 
 def format_number(value: float) -> str:
-    """Whole numbers as is, quarters as ¼ ½ ¾ (1½), anything else with one decimal comma."""
-    whole = int(value)
-    rest = round(value - whole, 2)
-    if rest == 0:
-        return str(whole)
-    if rest in _FRACTIONS:
-        return f"{whole or ''}{_FRACTIONS[rest]}"
+    """Whole numbers as is, anything else with one decimal comma (quarters are words, see
+    ``measure_phrase``)."""
+    if value == int(value):
+        return str(int(value))
     return f"{value:.1f}".replace(".", ",")
 
 
 def _pick(word: str, pos: str) -> Parse:
-    parses = _morph().parse(word)
-    return next((p for p in parses if pos in p.tag), parses[0])
+    """The parse of ``word`` as a dictionary form of ``pos`` ("банка" is a jar, not "of a bank")."""
+    parses = [p for p in _morph().parse(word) if pos in p.tag] or _morph().parse(word)
+    return next(
+        (p for p in parses if p.normal_form.replace("ё", "е") == word.replace("ё", "е")), parses[0]
+    )
 
 
 def _form(parse: Parse, grammemes: set[str]) -> str:
@@ -50,22 +49,54 @@ def _form(parse: Parse, grammemes: set[str]) -> str:
     return str(inflected.word if inflected is not None else parse.word)
 
 
-def measure_phrase(name: str, quantity: float) -> str:
-    """ "половник", 2 -> "2 половника"; "столовая ложка", 5 -> "5 столовых ложек"; ½ -> "½ стакана".
+def _half(genitive: str, one_word: bool) -> str:
+    """ "стакана" -> "полстакана", "яблока" -> "пол-яблока"; several words -> "половина ..."."""
+    if not one_word or genitive.startswith("пол"):
+        return f"половина {genitive}"
+    hyphen = "-" if genitive[0] in "аеёиоуыэюял" else ""
+    return f"пол{hyphen}{genitive}"
 
-    The noun agrees with the number as in Russian speech; adjectives before it follow.
+
+def measure_phrase(name: str, quantity: float) -> str:
+    """ "половник", 2 -> "2 половника"; "столовая ложка", 5 -> "5 столовых ложек".
+
+    The noun agrees with the number as in Russian speech; adjectives before it follow. Parts are
+    words, never fraction signs: "полстакана", "четверть пачки", "полтора половника",
+    "2 с половиной стакана", "1 и три четверти чайной ложки".
     """
     words = name.split()
     noun = _pick(words[-1], "NOUN")
     adjectives = [_pick(w, "ADJF") for w in words[:-1]]
-    number = format_number(quantity)
-    whole = quantity == int(quantity)
     count = int(quantity)
+    rest = round(quantity - count, 2)
     feminine = "femn" in noun.tag
 
-    if not whole:
-        noun_form, adj_form = {"gent", "sing"}, {"gent", "sing"} | ({"femn"} if feminine else set())
-    elif count % 100 not in range(11, 15) and count % 10 == 1:
+    if rest:
+        gent = {"gent", "sing"}
+        genitive = " ".join(
+            [_form(a, gent | ({"femn"} if feminine else set())) for a in adjectives]
+            + [_form(noun, gent)]
+        )
+        if count == 0 and rest == 0.5:
+            return _half(genitive, not adjectives)
+        if count == 0 and rest == 0.25:
+            return f"четверть {genitive}"
+        if count == 0 and rest == 0.75:
+            return f"три четверти {genitive}"
+        if count == 1 and rest == 0.5:
+            # "полтора стакана", but "полторы столовых ложки": the adjective goes plural
+            parts = [_form(a, {"gent", "plur"}) for a in adjectives] + [_form(noun, gent)]
+            return f"{'полторы' if feminine else 'полтора'} {' '.join(parts)}"
+        if rest == 0.75:
+            return f"{count} и три четверти {genitive}"
+        if rest in (0.25, 0.5):
+            joined = "с четвертью" if rest == 0.25 else "с половиной"
+            number, noun_part = measure_phrase(name, count).split(" ", 1)
+            return f"{number} {joined} {noun_part}"
+        return f"{format_number(quantity)} {genitive}"
+
+    number = format_number(quantity)
+    if count % 100 not in range(11, 15) and count % 10 == 1:
         noun_form, adj_form = {"nomn", "sing"}, {"nomn", "sing"} | ({"femn"} if feminine else set())
     elif count % 100 not in range(11, 15) and count % 10 in _FEW:
         noun_form = {"gent", "sing"}

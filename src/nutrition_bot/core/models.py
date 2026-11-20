@@ -87,6 +87,7 @@ class FoodCategory(StrEnum):
     BREAD = "bread"
     SWEET = "sweet"
     SAUCE = "sauce"
+    DISH = "dish"  # a ready dish (borscht, pizza): for "I ate", never in menus
     OTHER = "other"
 
 

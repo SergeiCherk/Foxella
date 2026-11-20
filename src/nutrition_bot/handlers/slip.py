@@ -1,15 +1,18 @@
 """/slip: the person ate something off-plan. Gentle correction spread over the next days."""
 
+import contextlib
 import logging
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.chat_action import ChatActionSender
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nutrition_bot import texts
 from nutrition_bot.config import Settings
+from nutrition_bot.core.eaten import EatenAnalyzer, decompose_eaten
 from nutrition_bot.core.measures import Catalog
 from nutrition_bot.core.menu import menu_food_ids
 from nutrition_bot.core.metrics import EventName
@@ -28,6 +31,7 @@ from nutrition_bot.handlers.common import (
     split_parse,
     track,
 )
+from nutrition_bot.handlers.guard import MenuGuard
 from nutrition_bot.handlers.onboarding import NOT_A_COMMAND
 from nutrition_bot.handlers.render import html_text, render_item_html
 from nutrition_bot.handlers.states import SlipFlow
@@ -38,8 +42,16 @@ SessionFactory = async_sessionmaker[AsyncSession]
 
 
 def _eaten_item(catalog: Catalog, entry: Entry) -> DishItem | None:
-    """What was eaten as a dish item: cooked version of a raw product, the measure named."""
+    """What was eaten as a dish item: cooked version of a raw product, the measure named.
+
+    Items the model put together ("measure_id" set) are used as they are.
+    """
     food = catalog.get_food(int(entry["food_id"]))
+    if "measure_id" in entry:
+        measure_id = int(entry["measure_id"])
+        if all(m.id != measure_id for m in catalog.measures_for(food.id)):
+            return None
+        return DishItem(food.id, measure_id, float(entry.get("qty", 1.0)))
     if food.state is FoodState.RAW:
         cooked = menu_food_ids(catalog, [food.id])
         food = catalog.get_food(cooked[0]) if cooked else food
@@ -84,17 +96,61 @@ async def on_slip_button(
         await start_slip(message, callback.from_user.id, state, session_factory)
 
 
+async def _guess(
+    message: Message,
+    phrases: list[str],
+    catalog: Catalog,
+    settings: Settings,
+    llm: EatenAnalyzer,
+    eaten_guard: MenuGuard,
+) -> list[Entry]:
+    """Ask the model what unknown phrases are made of; entries for those it could split."""
+    user_id = sender_id(message)
+    if not phrases or user_id is None or not getattr(llm, "available", True):
+        return []
+    if not eaten_guard.acquire(user_id).allowed:
+        return []  # a short brake on the paid model; the phrases are reported as unknown
+    asked = phrases[: settings.slip.llm_max_phrases]
+    await message.answer(texts.SLIP_GUESSING.format(items=html_text(", ".join(asked))))
+    typing = (
+        ChatActionSender.typing(bot=message.bot, chat_id=message.chat.id)
+        if message.bot is not None
+        else contextlib.nullcontext()
+    )
+    try:
+        async with typing:
+            found = await decompose_eaten(
+                llm, catalog, asked, menu_food_ids(catalog), settings.menu, settings.slip
+            )
+    finally:
+        eaten_guard.release(user_id)
+    return [
+        {"food_id": i.food_id, "measure_id": i.measure_id, "qty": i.quantity, "guess": phrase}
+        for phrase, items in found.items()
+        for i in items
+    ]
+
+
 async def on_slip_text(
     message: Message,
     state: FSMContext,
     catalog: Catalog,
     parser: FoodParser,
+    settings: Settings,
+    llm: EatenAnalyzer,
+    eaten_guard: MenuGuard,
 ) -> None:
-    """Free text of what was eaten."""
+    """Free text of what was eaten. Food we do not know goes to the model, if there is one."""
     result = parser.parse(message.text or "")
-    if result.unknown:
-        await message.answer(texts.SLIP_UNKNOWN.format(items=html_text(", ".join(result.unknown))))
+    guessed = await _guess(message, result.unknown, catalog, settings, llm, eaten_guard)
+    split = list(dict.fromkeys(e["guess"] for e in guessed))
+    unknown = [u for u in result.unknown if u not in split]
+    if unknown:
+        await message.answer(texts.SLIP_UNKNOWN.format(items=html_text(", ".join(unknown))))
+    if split:
+        await message.answer(texts.SLIP_GUESSED.format(items=html_text(", ".join(split))))
     sure, questions = split_parse(result)
+    sure += guessed
     if not sure and not questions:
         await message.answer(texts.SLIP_NOTHING, reply_markup=keyboards.slip_quick_keyboard())
         return

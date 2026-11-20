@@ -30,6 +30,7 @@ from nutrition_bot.core.models import (
     Dish,
     DishItem,
     Food,
+    FoodCategory,
     FoodState,
     Meal,
     MealType,
@@ -42,6 +43,12 @@ from nutrition_bot.core.nutrition import (
     meal_nutrients,
     sum_nutrients,
 )
+from nutrition_bot.core.recipe_check import (
+    CALORIE_WORDS,
+    MentionFinder,
+    recipe_food_problems,
+    text_problems,
+)
 from nutrition_bot.core.slip import apply_adjustment
 
 logger = logging.getLogger(__name__)
@@ -52,7 +59,23 @@ logger = logging.getLogger(__name__)
 DEADLINE_SLACK_S = time.get_clock_info("monotonic").resolution
 
 MAX_PROBLEMS = 8  # more feedback would only confuse the model
-CALORIE_WORDS = re.compile(r"ккал|калор|kcal", re.IGNORECASE)
+
+
+@dataclass(frozen=True, slots=True)
+class DishRules:
+    """Extra limits for every dish of a menu.
+
+    ``mentions`` finds foods in recipe texts (hidden calories, amounts next to food names);
+    without it only the plain text checks run. ``forbidden_food_ids`` are foods this person
+    does not eat (allergies, diets): they never appear, neither from the model nor from our own
+    dishes, and a recipe may not mention them.
+    """
+
+    mentions: MentionFinder | None = None
+    forbidden_food_ids: frozenset[int] = frozenset()
+
+
+NO_RULES = DishRules()
 
 
 class MealSource(StrEnum):
@@ -230,7 +253,11 @@ def _parse_dish(
 
 
 def parse_dishes(
-    raw: str, catalog: Catalog, allowed_food_ids: Sequence[int], cfg: MenuConfig
+    raw: str,
+    catalog: Catalog,
+    allowed_food_ids: Sequence[int],
+    cfg: MenuConfig,
+    rules: DishRules = NO_RULES,
 ) -> list[Dish]:
     """Turn the model's raw answer into validated dishes.
 
@@ -256,6 +283,18 @@ def parse_dishes(
         problems += dish_problems
         if dish is None:
             continue
+        label = f"dish {number}"
+        problems += text_problems(label, dish.name, dish.recipe_text)
+        if rules.mentions is not None:
+            problems += recipe_food_problems(
+                label,
+                dish.recipe_text,
+                [i.food_id for i in dish.items],
+                catalog,
+                rules.mentions,
+                rules.forbidden_food_ids,
+                cfg.hidden_kcal_min_100g,
+            )
         if dish.name.casefold() in seen_names:
             problems.append(f"dish {number}: duplicate dish name")
         seen_names.add(dish.name.casefold())
@@ -667,13 +706,61 @@ FALLBACK_TEMPLATES: tuple[_Template, ...] = (
         (S, B),
         (("egg_boiled", "яйцо", 2), ("tomato", "помидор", 1)),
     ),
+    # Four dishes without meat, fish, dairy, eggs, nuts and gluten, so that a menu can still be
+    # built when someone switches on several food restrictions at once.
+    _Template(
+        "Гречка с бананом и тыквенными семечками",
+        "Разогрейте гречку. Нарежьте банан кружочками, выложите сверху и посыпьте тыквенными "
+        "семечками.",
+        (B,),
+        (
+            ("buckwheat_cooked", "половник", 2),
+            ("banana", "банан", 1),
+            ("pumpkin_seeds", "горсть", 0.5),
+        ),
+    ),
+    _Template(
+        "Чечевица с помидором и огурцом",
+        "Разогрейте чечевицу. Нарежьте помидор и огурец, смешайте с чечевицей и заправьте маслом.",
+        (L, D),
+        (
+            ("lentils_cooked", "половник", 2),
+            ("tomato", "помидор", 1),
+            ("cucumber", "огурец", 1),
+            ("sunflower_oil|olive_oil", "чайная ложка", 1),
+        ),
+    ),
+    _Template(
+        "Нут с рисом и болгарским перцем",
+        "Разогрейте нут и рис. Нарежьте перец полосками, обжарьте на масле пару минут и "
+        "смешайте всё вместе.",
+        (L, D),
+        (
+            ("chickpeas_cooked", "половник", 1),
+            ("rice_white_cooked", "половник", 1),
+            ("bell_pepper", "перец", 1),
+            ("olive_oil|sunflower_oil", "чайная ложка", 1),
+        ),
+    ),
+    _Template(
+        "Яблоко с тыквенными семечками",
+        "Нарежьте яблоко дольками и посыпьте тыквенными семечками.",
+        (S,),
+        (("apple", "яблоко", 1), ("pumpkin_seeds", "горсть", 0.5)),
+    ),
 )
 
 
 def _resolve(
-    template: _Template, catalog: Catalog, allowed: Collection[int] | None = None
+    template: _Template,
+    catalog: Catalog,
+    allowed: Collection[int] | None = None,
+    forbidden: Collection[int] = (),
 ) -> Dish | None:
-    """Turn a template into a dish. Of several interchangeable foods, the user's one is chosen."""
+    """Turn a template into a dish. Of several interchangeable foods, the user's one is chosen.
+
+    Forbidden foods are never chosen; a template left without an option gives no dish.
+    """
     by_code = {f.code: f for f in catalog.foods}
     items: list[DishItem] = []
     for codes, measure_name, quantity in template.items:
@@ -695,6 +782,9 @@ def _resolve(
                 measure_name,
             )
             return None
+        options = [(f, m) for f, m in options if f.id not in forbidden]
+        if not options:
+            return None  # every option is something this person does not eat
         food, measure = next(
             ((f, m) for f, m in options if allowed is not None and f.id in allowed), options[0]
         )
@@ -709,20 +799,23 @@ def fallback_dishes(
     allowed_food_ids: Sequence[int],
     cfg: MenuConfig,
     avoid_names: Sequence[str] = (),
+    forbidden_food_ids: Collection[int] = (),
 ) -> tuple[list[Dish], bool]:
     """Pick one of our own dishes for the meal and fit it to the target.
 
     Dishes made only of foods the user has come first; if none fits, dishes with other foods
     are used and the second return value is ``True``. Dishes already used are chosen last.
-    Raises ``MenuUnavailableError`` if nothing can be fitted.
+    Forbidden foods are never used, not even then. Raises ``MenuUnavailableError`` if nothing
+    can be fitted.
     """
     avoid = {n.casefold() for n in avoid_names}
     allowed = set(allowed_food_ids)
+    forbidden = set(forbidden_food_ids)
     resolved = [
         dish
         for template in FALLBACK_TEMPLATES
         if meal_type in template.meal_types
-        and (dish := _resolve(template, catalog, allowed)) is not None
+        and (dish := _resolve(template, catalog, allowed, forbidden)) is not None
     ]
     for ignore_availability in (False, True):
         pool = [
@@ -754,6 +847,7 @@ async def build_meal(
     avoid_names: Sequence[str] = (),
     deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
+    rules: DishRules = NO_RULES,
 ) -> MealResult:
     """Build one meal: ask the model (with feedback and retries), else use a fallback dish.
 
@@ -777,7 +871,7 @@ async def build_meal(
         request = DishRequest(meal_type, target.kcal, allowed, avoid, feedback)
         try:
             raw = await asyncio.wait_for(generator.generate(request), timeout=remaining)
-            dishes = parse_dishes(raw, catalog, allowed, cfg)
+            dishes = parse_dishes(raw, catalog, allowed, cfg, rules)
             repeated = [d.name for d in dishes if d.name.casefold() in avoid_folded]
             if repeated:
                 raise InvalidLLMResponseError(
@@ -803,7 +897,9 @@ async def build_meal(
         meal = Meal(meal_type, tuple(fitted))
         return MealResult(meal, meal_nutrients(catalog, meal), MealSource.LLM, attempts, ())
 
-    dishes_fb, ignored = fallback_dishes(catalog, meal_type, target.kcal, allowed, cfg, avoid)
+    dishes_fb, ignored = fallback_dishes(
+        catalog, meal_type, target.kcal, allowed, cfg, avoid, rules.forbidden_food_ids
+    )
     meal = Meal(meal_type, tuple(dishes_fb))
     logger.info("fallback dish used for %s after %d attempt(s)", meal_type.value, attempts)
     return MealResult(
@@ -820,6 +916,7 @@ async def build_day(
     cfg: MenuConfig,
     avoid_names: Sequence[str] = (),
     deadline: float | None = None,
+    rules: DishRules = NO_RULES,
 ) -> list[MealResult]:
     """Build all meals of a day. Dish names already used are not repeated within the day."""
     targets = meal_targets(day_target, meal_types, cfg)
@@ -835,6 +932,7 @@ async def build_day(
             cfg,
             tuple(used),
             deadline,
+            rules=rules,
         )
         used += [d.name for d in result.meal.dishes]
         results.append(result)
@@ -858,17 +956,29 @@ def menu_food_ids(
     catalog: Catalog,
     food_ids: Iterable[int] | None = None,
     always_food_ids: Iterable[int] = (),
+    forbidden_food_ids: Collection[int] = (),
 ) -> tuple[int, ...]:
     """Foods a menu may use, given the products the user has.
 
     A dish is made of cooked or ready foods, so a raw product the user listed ("rice") is
     replaced by its cooked versions ("boiled rice"). ``None`` means "any product": every
     cooked or ready food. ``always_food_ids`` (staples such as oil) are added to a given list,
-    so a person who did not mention oil still gets dishes with oil. Raises ``UnknownFoodError``
-    for an unknown id.
+    so a person who did not mention oil still gets dishes with oil. ``forbidden_food_ids``
+    (restrictions) are removed from the result in every case, and so are ready dishes
+    (borscht, pizza): they exist for "I ate", a menu is built from foods. Raises
+    ``UnknownFoodError`` for an unknown id.
     """
+    forbidden = set(forbidden_food_ids) | {
+        f.id for f in catalog.foods if f.category is FoodCategory.DISH
+    }
     if food_ids is None:
-        return tuple(sorted(f.id for f in catalog.foods if f.state is not FoodState.RAW))
+        return tuple(
+            sorted(
+                f.id
+                for f in catalog.foods
+                if f.state is not FoodState.RAW and f.id not in forbidden
+            )
+        )
     allowed: set[int] = set()
     for food_id in food_ids:
         food = catalog.get_food(food_id)
@@ -882,7 +992,7 @@ def menu_food_ids(
             allowed.add(food.id)
     for food_id in always_food_ids:
         allowed.add(catalog.get_food(food_id).id)
-    return tuple(sorted(allowed))
+    return tuple(sorted(allowed - forbidden))
 
 
 async def build_menu(
@@ -893,6 +1003,7 @@ async def build_menu(
     allowed_food_ids: Sequence[int],
     cfg: MenuConfig,
     adjustments: Sequence[float] = (),
+    rules: DishRules = NO_RULES,
 ) -> list[list[MealResult]]:
     """Build a menu for 1..``cfg.max_days`` days.
 
@@ -908,7 +1019,15 @@ async def build_menu(
     for day in range(days):
         target = apply_adjustment(norm, adjustments[day]) if day < len(adjustments) else norm.target
         results = await build_day(
-            generator, catalog, target, meal_types, allowed_food_ids, cfg, tuple(used), deadline
+            generator,
+            catalog,
+            target,
+            meal_types,
+            allowed_food_ids,
+            cfg,
+            tuple(used),
+            deadline,
+            rules,
         )
         used += [dish.name for result in results for dish in result.meal.dishes]
         menu.append(results)
