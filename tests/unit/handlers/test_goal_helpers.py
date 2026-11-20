@@ -44,7 +44,7 @@ def test_the_term_check_is_offered_for_goals_that_change_weight(goal: Goal) -> N
 @pytest.mark.parametrize("goal", [Goal.MAINTAIN, None])
 def test_the_term_check_is_not_offered_otherwise(goal: Goal | None) -> None:
     assert datas(keyboards.after_onboarding_keyboard(goal)) == ["menu:start"]
-    assert datas(keyboards.profile_keyboard(goal)) == ["profile:edit", "del:ask"]
+    assert datas(keyboards.profile_keyboard(goal)) == ["profile:edit", "diet:show", "del:ask"]
 
 
 def test_menu_button_always_comes_first_and_delete_last() -> None:

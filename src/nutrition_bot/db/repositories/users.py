@@ -146,6 +146,21 @@ class UserRepository:
         await self._session.commit()
         return True
 
+    async def get_restrictions(self, telegram_id: int) -> list[str]:
+        """Food restriction codes ("meat", "nuts", ...); empty for none or an unknown user."""
+        user = await self._session.get(UserORM, telegram_id)
+        if user is None or not user.restrictions:
+            return []
+        return [code for code in user.restrictions.split(",") if code]
+
+    async def set_restrictions(self, telegram_id: int, codes: Iterable[str]) -> None:
+        """Replace the restrictions (kept in the given order, without repeats)."""
+        user = await self._session.get(UserORM, telegram_id)
+        if user is None:
+            return
+        user.restrictions = ",".join(dict.fromkeys(c for c in codes if c and "," not in c))
+        await self._session.commit()
+
     async def get_pantry(self, telegram_id: int) -> list[int]:
         """Ids of the products the user listed last time (empty: none, i.e. "any")."""
         rows = await self._session.scalars(

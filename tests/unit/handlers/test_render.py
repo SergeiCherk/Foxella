@@ -31,11 +31,7 @@ CATALOG, IDS = catalog_from_rows(load_foods(), load_measures())
     [
         (1, "1"),
         (2.0, "2"),
-        (0.5, "½"),
-        (0.25, "¼"),
-        (0.75, "¾"),
-        (1.5, "1½"),
-        (2.25, "2¼"),
+        (1.5, "1,5"),
         (0.3, "0,3"),
         (1.2, "1,2"),
         (10, "10"),
@@ -56,17 +52,30 @@ def test_format_number(value: float, expected: str) -> None:
         ("половник", 12, "12 половников"),
         ("половник", 21, "21 половник"),
         ("половник", 22, "22 половника"),
-        ("половник", 0.5, "½ половника"),
-        ("половник", 1.5, "1½ половника"),
-        ("половник", 0.25, "¼ половника"),
+        ("половник", 0.5, "половина половника"),
+        ("половник", 1.5, "полтора половника"),
+        ("половник", 0.25, "четверть половника"),
+        ("половник", 2.5, "2 с половиной половника"),
+        ("половник", 5.5, "5 с половиной половников"),
         ("горсть", 1, "1 горсть"),
         ("горсть", 2, "2 горсти"),
         ("горсть", 5, "5 горстей"),
-        ("горсть", 0.5, "½ горсти"),
+        ("горсть", 0.5, "полгорсти"),
+        ("горсть", 1.5, "полторы горсти"),
+        ("стакан", 0.5, "полстакана"),
+        ("стакан", 0.75, "три четверти стакана"),
+        ("стакан", 2.25, "2 с четвертью стакана"),
+        ("стакан", 1.75, "1 и три четверти стакана"),
+        ("яблоко", 0.5, "пол-яблока"),
+        ("ломтик", 0.5, "пол-ломтика"),
+        ("банка", 5, "5 банок"),
+        ("банка", 0.5, "полбанки"),
         ("столовая ложка", 1, "1 столовая ложка"),
         ("столовая ложка", 2, "2 столовые ложки"),
         ("столовая ложка", 5, "5 столовых ложек"),
-        ("столовая ложка", 0.5, "½ столовой ложки"),
+        ("столовая ложка", 0.5, "половина столовой ложки"),
+        ("столовая ложка", 1.5, "полторы столовых ложки"),
+        ("чайная ложка", 2.5, "2 с половиной чайные ложки"),
         ("чайная ложка", 3, "3 чайные ложки"),
         ("стакан", 3, "3 стакана"),
         ("яйцо", 2, "2 яйца"),
@@ -78,14 +87,22 @@ def test_measure_phrase_agrees_with_the_number(name: str, quantity: float, expec
     assert measure_phrase(name, quantity) == expected
 
 
+def test_no_fraction_signs_are_ever_shown() -> None:
+    for name in {m.name_ru for f in CATALOG.foods for m in CATALOG.measures_for(f.id)}:
+        for quantity in (0.25, 0.5, 0.75, 1.25, 1.5, 1.75, 2.5, 7.25):
+            phrase = measure_phrase(name, quantity)
+            assert not set(phrase) & set("½¼¾/"), phrase
+
+
 def test_every_real_measure_can_be_phrased_for_any_quantity() -> None:
     names = {m.name_ru for m in load_measures()}
     assert len(names) > 40
     for name in names:
         for quantity in (0.25, 0.5, 1, 1.5, 2, 3, 5, 12, 21):
             phrase = measure_phrase(name, quantity)
-            assert phrase.startswith(format_number(quantity))
-            assert phrase.split(" ", 1)[1].strip()
+            if quantity == int(quantity):
+                assert phrase.startswith(format_number(quantity))
+            assert len(phrase.split()) >= 2 or phrase.startswith("пол")
             assert not any(ch.isascii() and ch.isalpha() for ch in phrase)
 
 

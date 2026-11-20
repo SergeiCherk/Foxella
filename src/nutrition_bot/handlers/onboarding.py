@@ -273,7 +273,7 @@ async def on_goal(
     await message.answer(texts.NAV_HINT, reply_markup=keyboards.main_keyboard())
     await message.answer(
         done + (f"\n\n{note}" if note else ""),
-        reply_markup=keyboards.after_onboarding_keyboard(profile.goal),
+        reply_markup=keyboards.after_onboarding_keyboard(profile.goal, with_restrictions=True),
     )
 
 

@@ -14,6 +14,7 @@ from nutrition_bot.db.session import create_engine, create_session_factory
 from nutrition_bot.handlers.guard import MenuGuard
 from nutrition_bot.services.food_parser import FoodParser
 from nutrition_bot.services.llm import FakeLLM
+from nutrition_bot.services.recipe_mentions import AliasMentionFinder
 from tests.integration.bot_harness import BotHarness, MockedSession
 
 
@@ -46,6 +47,7 @@ async def bot_app(
             llm or FakeLLM(),
             FoodParser(aliases, settings.parser),
             guard=guard or MenuGuard(0.0),
+            mentions=AliasMentionFinder(aliases),
         )
         bot = create_bot("123456:TEST-TOKEN", session=MockedSession())
         yield BotHarness(dispatcher, bot, session_factory, catalog)

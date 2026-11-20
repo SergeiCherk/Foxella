@@ -6,7 +6,8 @@ data/usda/ (the folder is git-ignored). Then:
     uv run python scripts/import_usda.py            # show what would change
     uv run python scripts/import_usda.py --write    # update foods.csv
 
-Where each food's values come from is listed in src/nutrition_bot/data/food_sources.csv.
+Where each food's values come from is listed in src/nutrition_bot/data/food_sources.csv;
+ready dishes are computed from src/nutrition_bot/data/dish_recipes.csv.
 """
 
 import argparse
@@ -17,6 +18,7 @@ from nutrition_bot.config import PROJECT_ROOT
 from nutrition_bot.db.seed import FOODS_CSV
 from nutrition_bot.db.usda import (
     UsdaImportError,
+    load_recipes,
     load_sources,
     read_rows,
     read_usda,
@@ -38,14 +40,14 @@ def main(argv: list[str] | None = None) -> int:
         ids = {i for s in sources.values() for i in s.fdc_ids}
         usda = read_usda(args.sr_dir, ids)
         columns, rows = read_rows(FOODS_CSV)
-        new_rows, changes = refresh_rows(rows, sources, usda)
+        new_rows, changes = refresh_rows(rows, sources, usda, load_recipes())
     except UsdaImportError as error:
         print(f"ERROR: {error}")
         return 1
     for c in changes:
         print(f"{c.code:24} {c.field:12} {c.old:>7} -> {c.new}")
     counts = {name: sum(s.source == name for s in sources.values()) for name in
-              ("usda", "usda_mix", "derived", "label")}  # fmt: skip
+              ("usda", "usda_mix", "derived", "label", "recipe")}  # fmt: skip
     print(f"{len(changes)} value(s) differ; sources: {counts}")
     if args.write and changes:
         write_rows(FOODS_CSV, columns, new_rows)

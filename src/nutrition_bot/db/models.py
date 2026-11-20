@@ -123,6 +123,8 @@ class UserORM(Base):
     disclaimer_accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    # Food restrictions as comma-separated codes of ``DietConfig.rules`` ("meat,nuts").
+    restrictions: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class UserFoodORM(Base):

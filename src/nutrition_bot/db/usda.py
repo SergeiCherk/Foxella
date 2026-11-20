@@ -6,7 +6,10 @@
 - ``usda_mix``: the plain average of several records (``fdc_ids`` joined with ``;``);
 - ``derived``: a cooked grain or legume, ``raw / yield_factor`` (the grain only absorbs water);
 - ``label``: a Russian product without a USDA match; values stay as they are and are checked
-  against product labels by hand.
+  against product labels by hand;
+- ``recipe``: a ready dish (borscht, pelmeni) computed from the foods in ``dish_recipes.csv``:
+  the sum of the ingredients divided by the dish weight. ``water`` adds weight only;
+  ``cooked_weight`` replaces the sum of the weights when frying or baking loses water.
 
 Only ``kcal_100 .. fiber_100`` (and nothing else) are rewritten.
 """
@@ -21,7 +24,11 @@ from nutrition_bot.config import DATA_DIR
 
 SOURCES_CSV = DATA_DIR / "food_sources.csv"
 SOURCE_COLUMNS = ["code", "source", "fdc_ids", "note"]
-SOURCES = ("usda", "usda_mix", "derived", "label")
+SOURCES = ("usda", "usda_mix", "derived", "label", "recipe")
+RECIPES_CSV = DATA_DIR / "dish_recipes.csv"
+RECIPE_COLUMNS = ["dish_code", "food_code", "grams"]
+WATER = "water"  # weight without nutrients
+COOKED_WEIGHT = "cooked_weight"  # the weight of the finished dish, if not the sum
 FIELDS = ("kcal_100", "protein_100", "fat_100", "carb_100", "fiber_100")
 # SR Legacy nutrient ids for FIELDS, in the same order.
 NUTRIENT_IDS = {"1008": "kcal_100", "1003": "protein_100", "1004": "fat_100",
@@ -77,11 +84,56 @@ def _source_problem(src: Source) -> str | None:
         return f"unknown source {src.source!r}"
     if not all(i.isdigit() for i in src.fdc_ids):
         return "fdc_ids must be numbers"
-    expected = {"usda": (1, 1), "usda_mix": (2, 9), "derived": (0, 0), "label": (0, 0)}
+    expected = {"usda": (1, 1), "usda_mix": (2, 9), "derived": (0, 0), "label": (0, 0),
+                "recipe": (0, 0)}  # fmt: skip
     low, high = expected[src.source]
     if not low <= len(src.fdc_ids) <= high:
         return f"{src.source} needs {low}..{high} fdc_ids, got {len(src.fdc_ids)}"
     return None
+
+
+Recipe = list[tuple[str, float]]
+
+
+def load_recipes(path: Path = RECIPES_CSV) -> dict[str, Recipe]:
+    """Parse ``dish_recipes.csv``: (food code, grams) per dish, in file order."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames != RECIPE_COLUMNS:
+            raise UsdaImportError(f"{path.name}: expected columns {RECIPE_COLUMNS}")
+        recipes: dict[str, Recipe] = {}
+        for line, raw in enumerate(reader, start=2):
+            try:
+                grams = float(raw["grams"])
+            except ValueError:
+                raise UsdaImportError(f"{path.name}:{line}: grams must be a number") from None
+            if not grams > 0:
+                raise UsdaImportError(f"{path.name}:{line}: grams must be positive")
+            recipes.setdefault(raw["dish_code"], []).append((raw["food_code"], grams))
+    return recipes
+
+
+def recipe_values(code: str, recipe: Recipe, by_code: Mapping[str, Mapping[str, str]]) -> Values:
+    """Per-100 g values of a dish: the ingredients' sum over the dish weight."""
+    totals = dict.fromkeys(FIELDS, 0.0)
+    weight = 0.0
+    cooked: float | None = None
+    for food, grams in recipe:
+        if food == COOKED_WEIGHT:
+            cooked = grams
+            continue
+        weight += grams
+        if food == WATER:
+            continue
+        row = by_code.get(food)
+        if row is None:
+            raise UsdaImportError(f"{code}: unknown ingredient {food!r}")
+        for field in FIELDS:
+            totals[field] += float(row[field]) * grams / 100
+    final = cooked if cooked is not None else weight
+    if final <= 0:
+        raise UsdaImportError(f"{code}: the recipe has no weight")
+    return {field: total * 100 / final for field, total in totals.items()}
 
 
 def read_usda(sr_dir: Path, fdc_ids: Iterable[str]) -> dict[str, Values]:
@@ -120,9 +172,13 @@ def _fmt(field: str, value: float) -> str:
 
 
 def refresh_rows(
-    rows: list[dict[str, str]], sources: Mapping[str, Source], usda: Mapping[str, Values]
+    rows: list[dict[str, str]],
+    sources: Mapping[str, Source],
+    usda: Mapping[str, Values],
+    recipes: Mapping[str, Recipe] | None = None,
 ) -> tuple[list[dict[str, str]], list[Change]]:
     """New ``foods.csv`` rows (as text) and the list of values that changed."""
+    recipes = recipes or {}
     codes = [r["code"] for r in rows]
     if set(codes) != set(sources):
         extra, lacking = set(sources) - set(codes), set(codes) - set(sources)
@@ -130,9 +186,20 @@ def refresh_rows(
             f"food_sources.csv and foods.csv differ: missing {sorted(lacking)}, "
             f"unknown {sorted(extra)}"
         )
+    dishes = {c for c, s in sources.items() if s.source == "recipe"}
+    if dishes != set(recipes):
+        raise UsdaImportError(
+            f"dish_recipes.csv and the recipe sources differ: without a recipe "
+            f"{sorted(dishes - set(recipes))}, not a recipe source {sorted(set(recipes) - dishes)}"
+        )
+    for dish, recipe in recipes.items():
+        nested = [food for food, _ in recipe if food in dishes]
+        if nested:
+            raise UsdaImportError(f"{dish}: a dish cannot be made of other dishes {nested}")
     by_code = {r["code"]: dict(r) for r in rows}
-    # Derived rows use the raw row's *new* values, so they go last.
-    order = sorted(codes, key=lambda c: sources[c].source == "derived")
+    # Derived rows use the raw row's *new* values and dishes use both, so they go last.
+    rank = {"derived": 1, "recipe": 2}
+    order = sorted(codes, key=lambda c: rank.get(sources[c].source, 0))
     for code in order:
         src, row = sources[code], by_code[code]
         if src.source in ("usda", "usda_mix"):
@@ -142,6 +209,8 @@ def refresh_rows(
                 raise UsdaImportError(f"{code}: derived needs raw_code and yield_factor")
             raw, factor = by_code[row["raw_code"]], float(row["yield_factor"])
             new = {f: _fmt(f, float(raw[f]) / factor) for f in FIELDS}
+        elif src.source == "recipe":
+            new = {f: _fmt(f, v) for f, v in recipe_values(code, recipes[code], by_code).items()}
         else:
             continue
         row.update(new)

@@ -93,6 +93,7 @@ SHOPPING_TITLES: dict[FoodCategory, str] = {
     FoodCategory.FAT: "Масло и жиры",
     FoodCategory.SAUCE: "Соусы",
     FoodCategory.SWEET: "Сладкое",
+    FoodCategory.DISH: "Готовые блюда",
     FoodCategory.OTHER: "Другое",
 }
 SHOPPING_EMPTY = "В меню пока нет продуктов, поэтому список покупок пуст."
@@ -206,6 +207,7 @@ CATEGORY_ICONS: dict[FoodCategory, str] = {
     FoodCategory.BREAD: "🍞",
     FoodCategory.SWEET: "🍯",
     FoodCategory.SAUCE: "🥫",
+    FoodCategory.DISH: "🍲",
     FoodCategory.OTHER: "🍽",
 }
 MEAL_TITLES: dict[MealType, str] = {
@@ -238,6 +240,13 @@ SLIP_ASK = (
 )
 # {items}: what the person typed, escaped.
 SLIP_UNKNOWN = "Этого я не знаю, не стала учитывать: <i>{items}</i>"
+SLIP_GUESSING = (
+    "🔎 Такого нет в моей базе: <i>{items}</i>. Сейчас прикину, из чего это обычно состоит…"
+)
+SLIP_GUESSED = (
+    "🤖 <i>{items}</i>: разложила на продукты по типичному рецепту, это примерная оценка. "
+    "Если не похоже, нажми «Нет, заново» и напиши по-другому."
+)
 SLIP_NOTHING = "Из написанного я ничего не узнала 🤔 Можно перечислить проще или выбрать размер 👇"
 SLIP_CONFIRM = (
     "📝 <b>Поняла так:</b>\n{lines}\n\nПримерно <b>{kcal} ккал сверх плана</b>. Всё верно?"
@@ -371,6 +380,36 @@ GOAL_TOO_FAST = (
 GOAL_NO_SAFE = (
     "С твоими данными я не смогу предложить безопасный план для такого изменения веса: "
     "калорий и так немного. Лучше обсудить цель с врачом 💛"
+)
+
+# ---- Food restrictions (allergies, diets). Codes are the keys of ``DietConfig.rules``.
+BTN_RESTRICTIONS = "🚫 Ограничения в еде"
+RESTRICTION_LABELS: dict[str, str] = {
+    "meat": "Без мяса",
+    "fish": "Без рыбы и морепродуктов",
+    "dairy": "Без молочного",
+    "eggs": "Без яиц",
+    "nuts": "Без орехов",
+    "gluten": "Без глютена",
+}
+RESTRICTION_ON = "✅ {label}"
+RESTRICTION_OFF = "▫️ {label}"
+BTN_RESTRICTIONS_DONE = "Готово"
+RESTRICTIONS_ASK = (
+    "🚫 <b>Ограничения в еде</b>\n\n"
+    "Отметь, чего не должно быть в меню. Можно выбрать несколько пунктов, потом нажми "
+    "«Готово».\n\n"
+    "<i>Я убираю такие продукты из меню целиком, но не знаю, что внутри конкретной упаковки. "
+    "При аллергии всё равно проверяй состав хлеба, колбасы и соусов.</i>"
+)
+RESTRICTIONS_SAVED = "✅ Запомнила: <b>{items}</b>. Таких продуктов в меню больше не будет."
+RESTRICTIONS_NONE = "✅ Ограничений нет: в меню может быть всё."
+PROFILE_RESTRICTIONS = "\n\n🚫 Ограничения: <b>{items}</b>"
+# {items}: names of foods from our own catalog.
+MENU_RESTRICTED_NOTE = "Убрала из списка то, чего ты не ешь: <i>{items}</i>"
+MENU_EMPTY_RESTRICTED = (
+    "С такими ограничениями мне не хватило блюд для меню 😔 Попробуй назвать больше "
+    "продуктов или выбрать «Любые продукты»."
 )
 
 # ---- Protection against spamming the menu button, and old buttons.

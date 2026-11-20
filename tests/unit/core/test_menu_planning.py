@@ -10,7 +10,15 @@ from nutrition_bot.core.errors import (
     UnknownFoodError,
 )
 from nutrition_bot.core.menu import build_menu, menu_food_ids
-from nutrition_bot.core.models import ActivityLevel, FoodState, Goal, MealType, Profile, Sex
+from nutrition_bot.core.models import (
+    ActivityLevel,
+    FoodCategory,
+    FoodState,
+    Goal,
+    MealType,
+    Profile,
+    Sex,
+)
 from nutrition_bot.core.norms import calculate_daily_norm
 from nutrition_bot.core.slip import apply_adjustment
 from nutrition_bot.services.llm import FakeLLM
@@ -28,7 +36,14 @@ CFG = MenuConfig()
 
 def test_any_product_means_every_cooked_or_ready_food() -> None:
     ids = menu_food_ids(CATALOG)
-    assert ids == tuple(sorted(f.id for f in CATALOG.foods if f.state is not FoodState.RAW))
+    assert ids == tuple(
+        sorted(
+            f.id
+            for f in CATALOG.foods
+            if f.state is not FoodState.RAW and f.category is not FoodCategory.DISH
+        )
+    )
+    assert IDS["borscht"] not in ids  # ready dishes are for "I ate", not for menus
     assert IDS["rice_white_raw"] not in ids
     assert IDS["rice_white_cooked"] in ids
 

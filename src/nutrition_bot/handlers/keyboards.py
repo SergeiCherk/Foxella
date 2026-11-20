@@ -57,9 +57,31 @@ def _goal_rows(goal: Goal | None) -> list[list[tuple[str, str]]]:
     return []
 
 
-def after_onboarding_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
-    """The obvious next step after the norm is shown."""
-    return _build([[(texts.BTN_MAKE_MENU, "menu:start")], *_goal_rows(goal)])
+def after_onboarding_keyboard(
+    goal: Goal | None = None, with_restrictions: bool = False
+) -> InlineKeyboardMarkup:
+    """The obvious next step after the norm is shown (or after a correction: menu only)."""
+    rows = [[(texts.BTN_MAKE_MENU, "menu:start")], *_goal_rows(goal)]
+    if with_restrictions:
+        rows.append([(texts.BTN_RESTRICTIONS, "diet:show")])
+    return _build(rows)
+
+
+def restrictions_keyboard(codes: Sequence[str], selected: Sequence[str]) -> InlineKeyboardMarkup:
+    """One toggle per restriction (✅ when on) and "Готово"."""
+    rows = [
+        [
+            (
+                (texts.RESTRICTION_ON if code in selected else texts.RESTRICTION_OFF).format(
+                    label=texts.RESTRICTION_LABELS.get(code, code)
+                ),
+                f"diet:t:{code}",
+            )
+        ]
+        for code in codes
+    ]
+    rows.append([(texts.BTN_RESTRICTIONS_DONE, "diet:done")])
+    return _build(rows)
 
 
 def weeks_keyboard(options: Sequence[int]) -> InlineKeyboardMarkup:
@@ -110,6 +132,7 @@ def profile_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
         [
             [(texts.BTN_EDIT_PROFILE, "profile:edit")],
             *_goal_rows(goal),
+            [(texts.BTN_RESTRICTIONS, "diet:show")],
             [(texts.BTN_DELETE, "del:ask")],
         ]
     )

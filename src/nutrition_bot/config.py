@@ -68,6 +68,11 @@ class SlipConfig(BaseModel):
     ignore_below: float = 0.05  # ASSUMPTION: excess under 5 % of norm is ignored
     # ASSUMPTION: rough size of "something extra" for people who do not want to list foods.
     quick_kcal: dict[str, float] = {"small": 200.0, "medium": 500.0, "large": 900.0}
+    # Food we do not know ("лагман") is split into our foods by the language model.
+    llm_max_phrases: int = 3  # at most this many unknown phrases per message go to the model
+    llm_max_retries: int = 1  # a rejected answer is sent back once
+    llm_max_kcal_per_phrase: float = 3000.0  # more for one serving means wrong quantities
+    llm_cooldown_s: float = 10.0  # ASSUMPTION: one such call per user every 10 seconds
 
 
 # Measures that are whole pieces: nobody eats 0.5 of an egg or 1¼ bananas. Their quantities are
@@ -140,6 +145,68 @@ class MenuConfig(BaseModel):
     # ASSUMPTION: protects the paid LLM from button spamming: one build per user at a time and a
     # pause after each build.
     cooldown_s: float = 30.0
+    # ASSUMPTION: a recipe that mentions a food missing from the dish's items hides its calories
+    # ("полейте сметаной"). Only foods from this energy density up count: oil, sour cream,
+    # cheese, honey, bread, nuts. Pepper, lemon or herbs in the text change almost nothing.
+    hidden_kcal_min_100g: float = 100.0
+
+
+# Food restrictions a person can switch on in the profile. Each one removes whole categories and
+# single foods (by code; cooked versions of a removed raw food go too) from every menu, both
+# from the language model's list and from our own dishes.
+class DietRule(BaseModel):
+    """What one restriction removes."""
+
+    categories: tuple[str, ...] = ()
+    codes: tuple[str, ...] = ()
+
+
+class DietConfig(BaseModel):
+    """Restrictions offered in the profile (codes are stored per user)."""
+
+    rules: dict[str, DietRule] = {
+        "meat": DietRule(categories=("meat",)),
+        "fish": DietRule(categories=("fish",)),
+        # Butter, condensed milk and milk chocolate are dairy too, though filed elsewhere.
+        "dairy": DietRule(
+            categories=("dairy",), codes=("butter", "condensed_milk", "milk_chocolate")
+        ),
+        "eggs": DietRule(categories=("egg",), codes=("mayonnaise",)),
+        # Tree nuts and peanuts only: seeds (sunflower, pumpkin, sesame, chia, flax) are a
+        # different allergy. Granola is made with nuts.
+        "nuts": DietRule(
+            codes=(
+                "walnuts",
+                "almonds",
+                "peanuts",
+                "hazelnuts",
+                "cashew",
+                "pine_nuts",
+                "pistachio",
+                "peanut_butter",
+                "granola",
+            )
+        ),
+        # ASSUMPTION: oats are removed as well: ordinary oat flakes almost always carry gluten.
+        "gluten": DietRule(
+            codes=(
+                "pasta_raw",
+                "bulgur_raw",
+                "couscous_raw",
+                "semolina_raw",
+                "pearl_barley_raw",
+                "oat_flakes_dry",
+                "wheat_flour",
+                "granola",
+                "bread_rye",
+                "bread_white",
+                "bread_wholegrain",
+                "pita",
+                "crispbread",
+                "soy_sauce",
+            )
+        ),
+    }
 
 
 class ParserConfig(BaseModel):
@@ -196,6 +263,7 @@ class ShoppingConfig(BaseModel):
         "fat",
         "sauce",
         "sweet",
+        "dish",
         "other",
     )
 
@@ -236,6 +304,7 @@ class Settings(BaseSettings):
     shopping: ShoppingConfig = Field(default_factory=ShoppingConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     preset: PresetConfig = Field(default_factory=PresetConfig)
+    diet: DietConfig = Field(default_factory=DietConfig)
 
 
 @lru_cache

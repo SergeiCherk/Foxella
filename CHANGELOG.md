@@ -5,7 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Unknown food in "I ate" ("лагман") is split by the model into our foods
+  (`core/eaten.py`, `LanguageModel.decompose`); code validates it like menu dishes, computes the
+  calories and shows it as an estimate to confirm. At most 3 phrases a message and one call per
+  user every 10 s (`SlipConfig.llm_*`); without a model nothing changes.
+- 70 ready dishes and drinks for "I ate" (category `dish`): fast food, drinks and desserts
+  from USDA, home dishes (borscht, pelmeni, plov, olivier, ...) computed from our foods by
+  `dish_recipes.csv` (source `recipe`). They never reach menus or the model's list.
+- The parser reads "X с Y" as two foods unless the phrase is one alias, drops joiners from
+  aliases too ("овсянка на молоке" was never found) and reads number words in any case
+  ("из двух яиц").
+- Food restrictions in the profile (no meat, fish, dairy, eggs, nuts, gluten;
+  `DietConfig.rules`, migration `0005`). Forbidden foods are removed from the model's list,
+  from our own dishes (they used to borrow any food when short) and from the person's
+  products, with a note. Four built-in dishes free of all six groups make a 3-day menu
+  possible with any combination; a test covers all 63.
+- Recipe checks (`core/recipe_check.py`, `services/recipe_mentions.py`): a recipe may not
+  name a calorie-dense food missing from the dish (hidden calories), repeat amounts, or
+  carry links, @accounts, e-mails or phone numbers (names too). The model gets the
+  problems back and retries; every built-in recipe passes the same checks.
+
 ### Changed
+- Parts of a measure are words, not fraction signs: "полстакана", "четверть пачки",
+  "полтора половника", "2 с половиной стакана". "банка" is no longer read as "банк"
+  ("5 банков").
+- The food list in the prompt is compact ("6 Гречка (варёная): 8 половник ~100г; ..."):
+  the full list is 7.7k characters instead of 14.4k, sent in up to 36 calls a menu. The
+  prompt now states the new recipe rules.
 - Every message the person sees was rewritten in one style: bold titles, highlighted numbers,
   examples in italics, "Шаг N из 6" in the questionnaire, icons on buttons and shopping
   sections, a readable profile ("32 года", values without button icons) and "Приятного

@@ -18,6 +18,7 @@ from nutrition_bot import texts
 from nutrition_bot.config import PROJECT_ROOT, Settings
 from nutrition_bot.core.measures import Catalog
 from nutrition_bot.core.menu import DishGenerator
+from nutrition_bot.core.recipe_check import MentionFinder
 from nutrition_bot.db.repositories.foods import FoodRepository
 from nutrition_bot.db.seed import load_foods, load_measures
 from nutrition_bot.db.session import create_engine, create_session_factory
@@ -25,6 +26,7 @@ from nutrition_bot.handlers import build_router
 from nutrition_bot.handlers.guard import MenuGuard
 from nutrition_bot.services.food_parser import FoodParser
 from nutrition_bot.services.llm import build_llm
+from nutrition_bot.services.recipe_mentions import AliasMentionFinder
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +38,15 @@ def build_dispatcher(
     llm: DishGenerator,
     parser: FoodParser,
     guard: MenuGuard | None = None,
+    mentions: MentionFinder | None = None,
+    eaten_guard: MenuGuard | None = None,
 ) -> Dispatcher:
-    """Create the dispatcher; its keyword arguments are what handlers receive by name."""
+    """Create the dispatcher; its keyword arguments are what handlers receive by name.
+
+    ``mentions`` finds foods in the model's recipe texts (hidden calories, amounts); without it
+    recipes get only the plain text checks. ``eaten_guard`` limits how often one person's
+    unknown food is sent to the model in "I ate".
+    """
     dispatcher = Dispatcher(
         storage=MemoryStorage(),
         settings=settings,
@@ -46,6 +55,8 @@ def build_dispatcher(
         llm=llm,
         parser=parser,
         guard=guard or MenuGuard(settings.menu.cooldown_s),
+        mentions=mentions,
+        eaten_guard=eaten_guard or MenuGuard(settings.slip.llm_cooldown_s),
     )
     dispatcher.include_router(build_router())
     return dispatcher
@@ -83,7 +94,9 @@ async def run(settings: Settings) -> None:
     parser = FoodParser(aliases, settings.parser)
     llm = build_llm(settings, catalog)
     bot = create_bot(token)
-    dispatcher = build_dispatcher(settings, session_factory, catalog, llm, parser)
+    dispatcher = build_dispatcher(
+        settings, session_factory, catalog, llm, parser, mentions=AliasMentionFinder(aliases)
+    )
     try:
         # Inside the try block: if Telegram is unreachable here, the session is still closed.
         await bot.set_my_commands(

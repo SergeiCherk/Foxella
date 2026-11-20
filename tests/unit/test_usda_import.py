@@ -8,12 +8,13 @@ from pathlib import Path
 import pytest
 
 from nutrition_bot.config import PROJECT_ROOT
-from nutrition_bot.db.seed import FOODS_CSV, load_foods
+from nutrition_bot.db.seed import FOODS_CSV, load_foods, load_measures
 from nutrition_bot.db.usda import (
     FIELDS,
     SOURCE_COLUMNS,
     Source,
     UsdaImportError,
+    load_recipes,
     load_sources,
     read_rows,
     read_usda,
@@ -77,7 +78,7 @@ def test_foods_csv_is_up_to_date_with_the_usda_download() -> None:
     sources = load_sources()
     usda = read_usda(SR_DIR, {i for s in sources.values() for i in s.fdc_ids})
     _, rows = read_rows(FOODS_CSV)
-    _, changes = refresh_rows(rows, sources, usda)
+    _, changes = refresh_rows(rows, sources, usda, load_recipes())
     assert changes == []
 
 
@@ -216,3 +217,64 @@ def test_script_without_the_download_fails_with_a_clear_message(tmp_path: Path) 
     )  # fmt: skip
     assert result.returncode == 1
     assert "download the SR Legacy CSV" in result.stdout
+
+
+# --- ready dishes from recipes ------------------------------------------------------------
+
+
+def test_every_ready_dish_has_measures_and_is_not_a_menu_food() -> None:
+    foods = {f.code: f for f in load_foods()}
+    measured = {m.food_code for m in load_measures()}
+    dishes = [code for code, f in foods.items() if f.category == "dish"]
+    assert len(dishes) >= 60
+    assert set(dishes) <= measured
+    for code, recipe in load_recipes().items():
+        assert foods[code].category == "dish", code
+        for food, _ in recipe:
+            assert food in {"water", "cooked_weight"} or foods[food].category != "dish", code
+
+
+def test_a_recipe_is_its_ingredients_over_the_dish_weight() -> None:
+    rows = [row("beet", "40"), row("oil", "900", fat_100="100.0"), row("soup", "0")]
+    sources = {"beet": src("beet", "label"), "oil": src("oil", "label"),
+               "soup": src("soup", "recipe")}  # fmt: skip
+    recipes = {"soup": [("beet", 100.0), ("oil", 10.0), ("water", 90.0)]}
+    new, _ = refresh_rows(rows, sources, {}, recipes)
+    soup = new[2]
+    assert soup["kcal_100"] == "65"  # (40 + 90) kcal in 200 g
+    assert soup["fat_100"] == "5.5"  # (1 + 10) g in 200 g
+
+
+def test_cooked_weight_replaces_the_sum_when_water_is_lost() -> None:
+    rows = [row("potato", "80"), row("fried", "0")]
+    sources = {"potato": src("potato", "label"), "fried": src("fried", "recipe")}
+    recipes = {"fried": [("potato", 150.0), ("cooked_weight", 100.0)]}
+    new, _ = refresh_rows(rows, sources, {}, recipes)
+    assert new[1]["kcal_100"] == "120"
+
+
+def test_recipe_problems_are_errors() -> None:
+    rows = [row("a"), row("dish"), row("other")]
+    sources = {"a": src("a", "label"), "dish": src("dish", "recipe"),
+               "other": src("other", "recipe")}  # fmt: skip
+    with pytest.raises(UsdaImportError, match=r"without a recipe \['other'\]"):
+        refresh_rows(rows, sources, {}, {"dish": [("a", 1.0)]})
+    with pytest.raises(UsdaImportError, match="cannot be made of other dishes"):
+        refresh_rows(rows, sources, {}, {"dish": [("other", 1.0)], "other": [("a", 1.0)]})
+    with pytest.raises(UsdaImportError, match="unknown ingredient 'ghost'"):
+        refresh_rows(rows, sources, {}, {"dish": [("ghost", 1.0)], "other": [("a", 1.0)]})
+    with pytest.raises(UsdaImportError, match="has no weight"):
+        refresh_rows(rows, sources, {}, {"dish": [("a", 5.0), ("cooked_weight", 0.0)],
+                                         "other": [("a", 1.0)]})  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("text", "error"),
+    [("dish,food\n", "expected columns"), ("dish_code,food_code,grams\nx,a,many\n", "a number"),
+     ("dish_code,food_code,grams\nx,a,-1\n", "positive")],
+)  # fmt: skip
+def test_bad_recipe_files_are_refused(tmp_path: Path, text: str, error: str) -> None:
+    path = tmp_path / "dish_recipes.csv"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(UsdaImportError, match=error):
+        load_recipes(path)

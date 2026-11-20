@@ -43,10 +43,10 @@ def test_prompt_lists_only_allowed_foods_with_their_measures(
     chicken, oil = ids["chicken_breast_cooked"], ids["sunflower_oil"]
     system, user = build_prompt(request_for((chicken, oil)), catalog)
 
-    assert f"food_id={chicken}: Куриная грудка (готовая)" in user
-    assert f"food_id={oil}: Масло подсолнечное" in user
+    assert f"\n{chicken} Куриная грудка (готовая): " in user
+    assert f"\n{oil} Масло подсолнечное: " in user
     breast = next(m for m in catalog.measures_for(chicken) if m.name_ru == "грудка")
-    assert f"measure_id={breast.id} «грудка» (~150 г)" in user
+    assert f"{breast.id} грудка ~150г" in user
     assert "Рис" not in user  # foods that are not allowed never reach the model
     assert "обед" in user
     assert "612 ккал" in user
@@ -76,7 +76,8 @@ def test_prompt_contains_avoid_list_and_feedback_only_when_given(
 def test_prompt_skips_unknown_ids_and_duplicates(real: tuple[Catalog, dict[str, int]]) -> None:
     catalog, ids = real
     user = build_prompt(request_for((ids["apple"], ids["apple"], 999_999)), catalog)[1]
-    assert user.count("- food_id=") == 1  # the duplicate and the unknown id are skipped
+    assert user.count(f"\n{ids['apple']} Яблоко: ") == 1  # duplicate and unknown id skipped
+    assert "999999" not in user
     assert user.count("Яблоко") == 1
 
 
@@ -314,3 +315,42 @@ def test_llm_settings_are_read_from_the_environment(monkeypatch: pytest.MonkeyPa
     assert loaded.llm_model == "qwen/qwen3.8-flash"
     assert "secret" not in repr(loaded)
     assert isinstance(build_llm(loaded, Catalog([], [])), OpenAICompatibleLLM)
+
+
+# ---- unknown eaten food
+
+
+def test_the_eaten_prompt_lists_the_phrases_foods_and_feedback(
+    real: tuple[Catalog, dict[str, int]],
+) -> None:
+    from nutrition_bot.core.eaten import EatenRequest
+    from nutrition_bot.services.llm import EATEN_PROMPT, build_eaten_prompt
+
+    catalog, ids = real
+    request = EatenRequest(("лагман",), (ids["pasta_cooked"],), ("food 1: wrong",))
+    system, user = build_eaten_prompt(request, catalog)
+    assert system == EATEN_PROMPT
+    assert '"foods"' in system
+    assert "- лагман" in user
+    assert f"{ids['pasta_cooked']} Макароны (варёные):" in user
+    assert "- food 1: wrong" in user
+
+
+async def test_the_client_decomposes_with_the_eaten_prompt(
+    real: tuple[Catalog, dict[str, int]],
+) -> None:
+    from nutrition_bot.core.eaten import EatenRequest
+    from nutrition_bot.services.llm import EATEN_PROMPT
+
+    catalog, ids = real
+    client = stub_client(result=reply('{"foods": []}'))
+    llm = make(client, catalog=catalog)
+    assert llm.available
+    text = await llm.decompose(EatenRequest(("лагман",), (ids["pasta_cooked"],)))
+    assert text == '{"foods": []}'
+    assert client.chat.completions.calls[0]["messages"][0]["content"] == EATEN_PROMPT
+
+
+def test_a_fake_without_answers_is_not_available() -> None:
+    assert not FakeLLM().available
+    assert FakeLLM(eaten=["{}"]).available
