@@ -120,7 +120,7 @@ def test_item_line_shows_the_food_and_a_measure_not_grams() -> None:
 
 def test_html_item_line_has_a_category_icon_and_a_bold_measure() -> None:
     item = _meal().dishes[0].items[0]
-    assert render_item_html(CATALOG, item) == "🌾 Рис белый (варёный) — <b>2 половника</b>"
+    assert render_item_html(CATALOG, item) == "🍚 Рис белый (варёный) — <b>2 половника</b>"
 
 
 def test_every_food_category_has_an_icon() -> None:
@@ -133,7 +133,7 @@ def test_meal_block_has_title_nutrients_ingredients_and_folded_recipe() -> None:
     assert "ккал\n<i>Б " in text
     assert "<b>Рис</b>" in text
     assert "(≈" not in text  # one dish: its kcal would only repeat the meal line
-    assert "🌾 Рис белый (варёный) — <b>2 половника</b>" in text
+    assert "🍚 Рис белый (варёный) — <b>2 половника</b>" in text
     assert text.endswith("Сварите рис.</blockquote>")
     assert "<blockquote expandable>" + texts.RECIPE_LABEL in text
 
@@ -205,8 +205,8 @@ def test_shopping_blocks_are_grouped_by_category() -> None:
     items = build_shopping_list(CATALOG, [meals], ShoppingConfig())
     blocks = render_shopping(items, 1)
     assert blocks[0].startswith("🛒 <b>Список покупок на 1 день</b>")
-    assert any(b.startswith("🥚 <b>Яйца</b>\n• ") for b in blocks)
-    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n• Рис белый (сухой) — ") for b in blocks)
+    assert any(b.startswith("🥚 <b>Яйца</b>\n🥚 ") for b in blocks)
+    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n🍚 Рис белый (сухой) — ") for b in blocks)
 
 
 def test_item_without_a_measure_is_listed_without_an_amount() -> None:
@@ -214,7 +214,7 @@ def test_item_without_a_measure_is_listed_without_an_amount() -> None:
 
     food = CATALOG.get_food(IDS["rice_white_raw"])
     blocks = render_shopping([ShoppingItem(food, 50.0, None, 0.0)], 3)
-    assert f"• {food.name_ru} — <b>{texts.SHOPPING_NO_AMOUNT}</b>" in blocks[1]
+    assert f"🍚 {food.name_ru} — <b>{texts.SHOPPING_NO_AMOUNT}</b>" in blocks[1]
     assert "на 3 дня</b>" in blocks[0]
     assert blocks[0].endswith("<i>То, что уже есть дома, я не включала.</i>")
 
@@ -240,9 +240,9 @@ def test_staples_are_listed_in_their_own_block_at_the_end() -> None:
     ]
     blocks = render_shopping(items, 1)
     assert blocks[-1].startswith(texts.SHOPPING_STAPLES_TITLE)
-    assert f"• {oil.name_ru} — " in blocks[-1]
+    assert f"🌻 {oil.name_ru} — " in blocks[-1]
     assert not any(oil.name_ru in b for b in blocks[:-1])  # not repeated under its category
-    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n• ") for b in blocks)
+    assert any(b.startswith("🌾 <b>Крупы и макароны</b>\n🍚 ") for b in blocks)
 
 
 def test_without_staples_there_is_no_staple_block() -> None:
@@ -274,3 +274,38 @@ def test_shopping_escapes_food_names() -> None:
     blocks = render_shopping([ShoppingItem(food, 50.0, None, 0.0)], 1)
     assert "Рис &lt;особый&gt; &amp; Co" in blocks[1]
     assert not any(html_problems(b) for b in blocks)
+
+
+@pytest.mark.parametrize(
+    ("code", "icon"),
+    [
+        ("cucumber", "🥒"),
+        ("tomato", "🍅"),
+        ("greens_herbs", "🌿"),
+        ("olive_oil", "🫒"),
+        ("carrot", "🥕"),
+        ("pearl_barley_cooked", "🥣"),  # "pear" must not catch "pearl_barley"
+        ("pear", "🍐"),
+        ("egg_noodles_cooked", "🍜"),  # before the egg rule
+        ("egg_boiled", "🥚"),
+        ("eggplant", "🍆"),
+        ("potato_chips", "🍟"),
+        ("pineapple", "🍍"),
+        ("cream_10", "🥛"),  # no rule: the category icon
+    ],
+)
+def test_each_food_gets_its_own_icon(code: str, icon: str) -> None:
+    from nutrition_bot.handlers.render import food_icon
+
+    assert food_icon(CATALOG.get_food(IDS[code])) == icon
+
+
+def test_icons_are_long_supported_emoji_and_rules_name_real_foods() -> None:
+    from nutrition_bot.handlers.render import food_icon
+
+    newer = {"🫛", "🫚", "🪿", "🫎"}  # Unicode 15: empty boxes on older phones
+    assert not {food_icon(f) for f in CATALOG.foods} & newer
+    codes = {f.code for f in CATALOG.foods}
+    for prefixes, _ in texts.FOOD_ICON_RULES:
+        for prefix in prefixes:
+            assert any(c == prefix or c.startswith(prefix + "_") for c in codes), prefix

@@ -370,3 +370,161 @@ shashlik,порция,200
 latte,чашка,250
 tea,чашка,250
 coffee,чашка,200
+ryazhenka_4,стакан,250
+snezhok,стакан,250
+ayran,стакан,250
+kefir_3_2,стакан,250
+milk_1_5,стакан,250
+milk_1_5,столовая ложка,15
+yogurt_fruit,стаканчик,125
+yogurt_drink,бутылка,270
+yogurt_drink,стакан,250
+tvorozhok,штука,100
+curd_mass_raisins,столовая ложка,30
+curd_mass_raisins,пачка,250
+syrok,штука,45
+adyghe_cheese,ломтик,30
+adyghe_cheese,кусок,100
+sour_cream_10,столовая ложка,20
+sour_cream_10,чайная ложка,7
+cream_20,столовая ложка,15
+cream_20,стакан,250
+cream_33,столовая ложка,15
+cream_33,стакан,240
+processed_cheese,ломтик,20
+processed_cheese,столовая ложка,25
+ghee,чайная ложка,5
+ghee,столовая ложка,13
+condensed_boiled,чайная ложка,12
+condensed_boiled,столовая ложка,38
+mayonnaise_light,столовая ложка,15
+mayonnaise_light,чайная ложка,5
+pork_neck_raw,кусок,150
+pork_neck_cooked,кусок,105
+beef_chuck_raw,кусок,150
+beef_chuck_cooked,кусок,105
+lamb_raw,кусок,150
+lamb_cooked,кусок,110
+chicken_leg_raw,окорочок,220
+chicken_leg_cooked,окорочок,165
+chicken_wing_raw,крыло,60
+chicken_wing_cooked,крыло,42
+chicken_heart_raw,порция,150
+chicken_heart_cooked,порция,110
+turkey_thigh_raw,кусок,150
+turkey_thigh_cooked,кусок,105
+duck_roasted,кусок,100
+salo,ломтик,10
+bacon,ломтик,8
+salami,ломтик,8
+servelat,ломтик,10
+sardelki,штука,90
+stewed_beef_canned,банка,325
+stewed_beef_canned,столовая ложка,30
+smoked_chicken_breast,ломтик,20
+smoked_chicken_breast,кусок,100
+cod_liver,столовая ложка,20
+cod_liver,банка,120
+sprats,штука,8
+sprats,банка,160
+herring_oil,кусочек,15
+trout_raw,стейк,150
+trout_cooked,стейк,120
+perch_raw,филе,150
+perch_cooked,филе,120
+squid_raw,тушка,150
+mussels_cooked,горсть,50
+mussels_cooked,порция,150
+caviar_red,чайная ложка,10
+caviar_red,столовая ложка,25
+salmon_smoked,ломтик,15
+pink_salmon_canned,банка,180
+pink_salmon_canned,столовая ложка,25
+cabbage_red,стакан,70
+brussels_sprouts,стакан,90
+brussels_sprouts,горсть,50
+asparagus,пучок,250
+asparagus,стебель,16
+peas_frozen,стакан,135
+peas_frozen,столовая ложка,15
+veg_mix_frozen,стакан,135
+veg_mix_frozen,пачка,400
+tomatoes_canned,стакан,240
+tomatoes_canned,банка,400
+ginger,чайная ложка,2
+ginger,кусочек,10
+chanterelles,горсть,50
+chanterelles,стакан,55
+squash_caviar,столовая ложка,30
+seaweed_salad,столовая ложка,30
+korean_carrot,столовая ложка,25
+lecho,столовая ложка,30
+blackcurrant,горсть,60
+blackcurrant,стакан,110
+gooseberry,горсть,60
+gooseberry,стакан,150
+blackberry,горсть,60
+blackberry,стакан,145
+fig_fresh,штука,50
+fig_dried,штука,20
+nectarine,штука,140
+lime,штука,65
+lime,долька,8
+pomelo,долька,60
+bread_borodinsky,ломтик,30
+lavash_thin,лист,80
+sushki,штука,10
+sushki,горсть,40
+bread_crumbs,столовая ложка,10
+cornstarch,столовая ложка,10
+cornstarch,чайная ложка,3
+egg_noodles_raw,стакан,40
+egg_noodles_raw,горсть,30
+egg_noodles_cooked,половник,100
+egg_noodles_cooked,стакан,160
+rice_parboiled_raw,стакан,185
+rice_parboiled_raw,горсть,35
+rice_parboiled_cooked,половник,100
+rice_parboiled_cooked,стакан,160
+pryanik,штука,40
+cookie_sugar,штука,12
+cookie_sugar,горсть,40
+cookie_oat,штука,25
+wafers,штука,15
+zefir,штука,35
+pastila,кусочек,15
+halva,кусочек,25
+marmalade,штука,8
+marmalade,горсть,40
+chocolate_candies,штука,12
+chocolate_bar,батончик,50
+hazelnut_spread,чайная ложка,10
+hazelnut_spread,столовая ложка,20
+powdered_sugar,чайная ложка,3
+powdered_sugar,столовая ложка,8
+protein_bar,батончик,40
+whey_protein,мерная ложка,30
+kvass,стакан,250
+kvass,бутылка,500
+mors_cranberry,стакан,250
+compote,стакан,250
+nectar_multifruit,стакан,250
+coffee_3in1,пакетик,14.5
+tomato_juice,стакан,250
+energy_drink,банка,450
+diet_soda,банка,330
+diet_soda,стакан,250
+adjika,чайная ложка,7
+adjika,столовая ложка,20
+pesto,чайная ложка,6
+pesto,столовая ложка,16
+horseradish,чайная ложка,5
+horseradish,столовая ложка,15
+flaxseed_oil,чайная ложка,5
+flaxseed_oil,столовая ложка,14
+sesame_oil,чайная ложка,5
+sesame_oil,столовая ложка,14
+coconut_flakes,столовая ложка,6
+coconut_flakes,горсть,20
+brazil_nuts,штука,5
+brazil_nuts,горсть,30

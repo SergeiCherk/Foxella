@@ -5,6 +5,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### UI
+- Every food has its own emoji in menus and the shopping list (🥒 cucumber, 🍅 tomato,
+  🌿 herbs) instead of one per category (`texts.FOOD_ICON_RULES`); foods without a rule keep
+  the category icon. Only long-supported emoji, so older phones show no empty boxes.
+
+### Data
+- 110 everyday foods added (381 in total): ряженка, снежок, сырки, сало, бекон, сервелат,
+  тушёнка, форель, икра, лаваш, сушки, пряники, зефир, квас, морс and more. 66 from USDA,
+  42 from VkusVill product cards (`label`), 2 cooked grains derived. Restrictions cover them
+  (dairy, eggs, nuts, gluten lists extended); drinks are `dish` and never in menus.
+- 13 of the 14 Russian `label` foods checked against VkusVill product cards (per 100 g as
+  on the pack, mean of 2-3 brands, brands in `food_sources.csv`): докторская 257 -> 216 kcal,
+  творог 9 % 169 -> 150, моцарелла 280 -> 239, майонез 627 -> 612, and smaller changes.
+  Dishes made of them were recomputed (оливье 170 -> 161). Natural yoghurt is still to check.
+
 ### Changed
 - Docker: uv 0.12 (the version that wrote uv.lock), only the image's own Python, scripts in
   the image, logs capped at 3 x 10 MB. Server guide `docs/deploy.md`, backups
