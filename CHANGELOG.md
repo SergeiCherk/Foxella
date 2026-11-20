@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### UI
+- README shows five screenshots (`docs/images/`).
+- "1 с четвертью стакана" instead of "1 с четвертью стакан"; "which one?" options are
+  sorted by name (Сметана 10 %, 15 %, 20 %).
 - Every food has its own emoji in menus and the shopping list (🥒 cucumber, 🍅 tomato,
   🌿 herbs) instead of one per category (`texts.FOOD_ICON_RULES`); foods without a rule keep
   the category icon. Only long-supported emoji, so older phones show no empty boxes.

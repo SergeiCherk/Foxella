@@ -136,8 +136,9 @@ async def answer_remembered(
 
 
 def options_of(catalog: Catalog, question: Entry) -> Sequence[tuple[int, str]]:
-    """(food id, display name) for each option of a question."""
-    return [(i, catalog.get_food(i).name_ru) for i in question["ids"]]
+    """(food id, display name) for each option of a question, by name ("Сметана 10%" first)."""
+    options = [(i, catalog.get_food(i).name_ru) for i in question["ids"]]
+    return sorted(options, key=lambda option: option[1].casefold())
 
 
 def low_kcal_note(profile: Profile, kcal: float, settings: Settings) -> str:
