@@ -102,6 +102,7 @@ WHOLE_PIECE_MEASURES: tuple[str, ...] = (
     "голень",
     "лепёшка",
     "зубчик",
+    "пакетик",
     "штука",
 )
 
@@ -171,9 +172,34 @@ class DietConfig(BaseModel):
         "fish": DietRule(categories=("fish",)),
         # Butter, condensed milk and milk chocolate are dairy too, though filed elsewhere.
         "dairy": DietRule(
-            categories=("dairy",), codes=("butter", "condensed_milk", "milk_chocolate")
+            categories=("dairy",),
+            codes=(
+                "butter",
+                "ghee",
+                "condensed_milk",
+                "condensed_boiled",
+                "milk_chocolate",
+                "chocolate_candies",
+                "chocolate_bar",
+                "hazelnut_spread",
+                "cookie_sugar",
+                "pesto",
+                "protein_bar",
+                "whey_protein",
+            ),
         ),
-        "eggs": DietRule(categories=("egg",), codes=("mayonnaise",)),
+        # Marshmallow (zefir) and pastila are whipped with egg white.
+        "eggs": DietRule(
+            categories=("egg",),
+            codes=(
+                "mayonnaise",
+                "mayonnaise_light",
+                "egg_noodles_raw",
+                "zefir",
+                "pastila",
+                "cookie_sugar",
+            ),
+        ),
         # Tree nuts and peanuts only: seeds (sunflower, pumpkin, sesame, chia, flax) are a
         # different allergy. Granola is made with nuts.
         "nuts": DietRule(
@@ -187,6 +213,10 @@ class DietConfig(BaseModel):
                 "pistachio",
                 "peanut_butter",
                 "granola",
+                "brazil_nuts",
+                "hazelnut_spread",
+                "chocolate_bar",
+                "pesto",
             )
         ),
         # ASSUMPTION: oats are removed as well: ordinary oat flakes almost always carry gluten.
@@ -206,6 +236,16 @@ class DietConfig(BaseModel):
                 "pita",
                 "crispbread",
                 "soy_sauce",
+                "bread_borodinsky",
+                "lavash_thin",
+                "sushki",
+                "bread_crumbs",
+                "egg_noodles_raw",
+                "pryanik",
+                "cookie_sugar",
+                "cookie_oat",
+                "wafers",
+                "protein_bar",
             )
         ),
     }

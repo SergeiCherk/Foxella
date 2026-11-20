@@ -14,7 +14,7 @@ from pymorphy3.analyzer import Parse
 from nutrition_bot import texts
 from nutrition_bot.core.balance import BalanceHint
 from nutrition_bot.core.measures import Catalog
-from nutrition_bot.core.models import DishItem, FoodCategory, Meal, Nutrients
+from nutrition_bot.core.models import DishItem, Food, FoodCategory, Meal, Nutrients
 from nutrition_bot.core.nutrition import day_nutrients, dish_nutrients, meal_nutrients
 from nutrition_bot.core.shopping import ShoppingItem
 
@@ -144,11 +144,24 @@ def shorten(text: str, limit: int = MAX_RECIPE_CHARS) -> str:
     return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:.") + "…"
 
 
+@lru_cache(maxsize=1024)
+def _icon_for(code: str, category: FoodCategory) -> str:
+    for prefixes, icon in texts.FOOD_ICON_RULES:
+        if any(code == p or code.startswith(p + "_") for p in prefixes):
+            return icon
+    return texts.CATEGORY_ICONS.get(category, "•")
+
+
+def food_icon(food: Food) -> str:
+    """The emoji of a food: its own (🥒 cucumber, 🍅 tomato), else its category's."""
+    return _icon_for(food.code, food.category)
+
+
 def render_item_html(catalog: Catalog, item: DishItem) -> str:
     """One ingredient: ``🌾 Рис белый (варёный) — <b>2 половника</b>``."""
     food = catalog.get_food(item.food_id)
     measure = catalog.get_measure(item.food_id, item.measure_id)
-    icon = texts.CATEGORY_ICONS.get(food.category, "•")
+    icon = food_icon(food)
     amount = measure_phrase(measure.name_ru, item.quantity)
     return f"{icon} {html_text(food.name_ru)} — <b>{html_text(amount)}</b>"
 
@@ -208,7 +221,7 @@ def render_shopping(items: Sequence[ShoppingItem], days: int) -> list[str]:
             if item.measure is None
             else measure_phrase(item.measure.name_ru, item.quantity)
         )
-        line = f"• {html_text(item.food.name_ru)} — <b>{html_text(amount)}</b>"
+        line = f"{food_icon(item.food)} {html_text(item.food.name_ru)} — <b>{html_text(amount)}</b>"
         if item.is_staple:
             staples.append(line)
         else:

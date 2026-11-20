@@ -180,10 +180,11 @@ def test_joiners_inside_an_alias_do_not_break_it() -> None:
 def test_with_joins_two_foods_unless_the_phrase_is_one_alias() -> None:
     result = PARSER.parse("тарелка борща со сметаной")
     assert codes(result.items) == ["borscht"]
-    assert [CATALOG.get_food(i).code for i in result.ambiguous[0].food_ids] == [
+    assert {CATALOG.get_food(i).code for i in result.ambiguous[0].food_ids} == {
+        "sour_cream_10",
         "sour_cream_15",
         "sour_cream_20",
-    ]
+    }
     assert codes(PARSER.parse("3 блина со сгущёнкой").items) == ["bliny", "condensed_milk"]
     first, second = PARSER.parse("3 блина со сгущёнкой").items
     assert (first.quantity, second.quantity) == (3, 1)  # the number belongs to the first food
@@ -208,3 +209,27 @@ def test_a_salad_of_vegetables_is_the_vegetables_not_lettuce() -> None:
     assert codes(PARSER.parse("салат из огурцов и помидоров").items) == ["cucumber", "tomato"]
     assert codes(PARSER.parse("Салат из капусты").items) == ["cabbage_white"]
     assert codes(PARSER.parse("салат").items) == ["lettuce"]  # on its own it is still lettuce
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ряженка", "ryazhenka_4"),
+        ("2 сырка", "syrok"),
+        ("сало", "salo"),
+        ("форель", "trout_raw"),
+        ("кабачковая икра", "squash_caviar"),
+        ("красная икра", "caviar_red"),
+        ("лаваш", "lavash_thin"),
+        ("сушки", "sushki"),
+        ("зефир", "zefir"),
+        ("квас", "kvass"),
+        ("нескафе", "coffee_3in1"),
+        ("морковь по-корейски", "korean_carrot"),
+        ("тушёнка", "stewed_beef_canned"),
+        ("шпроты", "sprats"),
+    ],
+)
+def test_everyday_foods_added_later_are_recognised(text: str, expected: str) -> None:
+    result = PARSER.parse(text)
+    assert codes(result.items) == [expected]

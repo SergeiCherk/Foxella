@@ -42,7 +42,7 @@ def test_seed_script_fills_a_migrated_database(
 
     result = run("seed_db.py", database_url=url)
     assert result.returncode == 0, result.stderr
-    assert "Seeded 271 foods" in result.stdout
+    assert "Seeded 381 foods" in result.stdout
 
 
 def test_try_llm_script_explains_a_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
