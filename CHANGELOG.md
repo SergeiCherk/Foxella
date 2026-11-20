@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Licence
+- The project is proprietary from now on: all rights reserved (`LICENSE`). Versions published
+  before under MIT stay MIT for those who obtained them then.
+
 ### UI
 - README shows five screenshots (`docs/images/`).
 - "1 с четвертью стакана" instead of "1 с четвертью стакан"; "which one?" options are

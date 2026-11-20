@@ -4,7 +4,7 @@ Telegram-бот «Питание без весов». Фоксела счита�
 
 [![CI](https://github.com/SergeiCherk/foxella/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeiCherk/foxella/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](LICENSE)
 
 ## Возможности
 
@@ -248,4 +248,4 @@ scripts/         проверка данных, заполнение базы, �
 
 ## Лицензия и контакты
 
-[MIT](LICENSE). Вопросы и предложения: [Issues](https://github.com/SergeiCherk/foxella/issues) или напишите автору в Telegram: [@seredgaqq](https://t.me/seredgaqq).
+Все права защищены (см. [LICENSE](LICENSE)): копировать, изменять, распространять и запускать код без письменного разрешения автора нельзя. Версии, опубликованные до 21.11.2026 под MIT, остаются под MIT для тех, кто получил их тогда. Вопросы и предложения: [Issues](https://github.com/SergeiCherk/foxella/issues) или напишите автору в Telegram: [@seredgaqq](https://t.me/seredgaqq).
