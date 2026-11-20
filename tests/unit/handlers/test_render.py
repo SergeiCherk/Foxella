@@ -309,3 +309,11 @@ def test_icons_are_long_supported_emoji_and_rules_name_real_foods() -> None:
     for prefixes, _ in texts.FOOD_ICON_RULES:
         for prefix in prefixes:
             assert any(c == prefix or c.startswith(prefix + "_") for c in codes), prefix
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("стакан", "1 с четвертью стакана"), ("столовая ложка", "1 с четвертью столовой ложки")],
+)
+def test_one_and_a_quarter_takes_the_genitive(name: str, expected: str) -> None:
+    assert measure_phrase(name, 1.25) == expected

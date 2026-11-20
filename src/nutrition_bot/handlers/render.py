@@ -89,6 +89,8 @@ def measure_phrase(name: str, quantity: float) -> str:
             return f"{'полторы' if feminine else 'полтора'} {' '.join(parts)}"
         if rest == 0.75:
             return f"{count} и три четверти {genitive}"
+        if count == 1 and rest == 0.25:
+            return f"1 с четвертью {genitive}"  # not "1 с четвертью стакан"
         if rest in (0.25, 0.5):
             joined = "с четвертью" if rest == 0.25 else "с половиной"
             number, noun_part = measure_phrase(name, count).split(" ", 1)
