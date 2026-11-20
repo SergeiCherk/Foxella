@@ -1,5 +1,8 @@
 # Contributing
 
+The project is proprietary (see `LICENSE`): contributions are accepted only from people the
+author has invited, and by contributing you agree that the author owns and may use them.
+
 1. Install [uv](https://docs.astral.sh/uv/) and run `uv sync`.
 2. Install hooks: `uv run pre-commit install`.
 3. Before a pull request run:
