@@ -139,6 +139,8 @@ class MenuConfig(BaseModel):
     # ASSUMPTION: the whole menu must be built within this time; meals not ready by then are filled
     # with our own dishes. One slow LLM call can no longer keep the user waiting for minutes.
     build_timeout_s: float = 120.0
+    # Ask for a whole day in one call first; meals that fail are then asked for one by one.
+    day_requests: bool = True
     # ASSUMPTION: foods that nearly every kitchen has. They are always allowed in a menu even if
     # the user did not list them, and in the shopping list they appear as "check what you have".
     staple_codes: tuple[str, ...] = ("sunflower_oil", "olive_oil", "butter", "sugar", "honey")

@@ -1,7 +1,8 @@
 """Helpers shared by several handler modules. No business logic: only glue code."""
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from html import escape
 from typing import Any
 
 from aiogram.types import CallbackQuery, Message
@@ -15,6 +16,7 @@ from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.models import Profile, Sex
 from nutrition_bot.core.norms import is_below_sex_minimum
 from nutrition_bot.db.repositories.events import EventRepository
+from nutrition_bot.db.repositories.users import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,71 @@ def apply_choice(sure: list[Entry], questions: list[Entry], choice: str) -> None
     for food_id in ids:
         if food_id in question["ids"] and all(e["food_id"] != food_id for e in sure):
             sure.append({"food_id": food_id, "qty": question["qty"], "words": question["words"]})
+
+
+def choice_key(food_ids: Sequence[int]) -> str:
+    """The same options in any order give the same key ("12,14")."""
+    return ",".join(str(i) for i in sorted(set(food_ids)))
+
+
+def use_remembered(
+    sure: list[Entry], questions: list[Entry], choices: Mapping[str, int]
+) -> list[Entry]:
+    """Answer the questions this person has answered before; return the questions answered."""
+    answered: list[Entry] = []
+    for question in list(questions):
+        food_id = choices.get(choice_key(question["ids"]))
+        if food_id is None or food_id not in question["ids"]:
+            continue
+        questions.remove(question)
+        if all(e["food_id"] != food_id for e in sure):
+            sure.append({"food_id": food_id, "qty": question["qty"], "words": question["words"]})
+        answered.append({**question, "chosen": food_id})
+    return answered
+
+
+async def remember_choice(
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: int,
+    question: Entry,
+    choice: str,
+) -> None:
+    """Keep a pick of one specific option ("all" and "skip" are not remembered)."""
+    if not choice.isdigit() or int(choice) not in question["ids"]:
+        return
+    async with session_factory() as session:
+        await UserRepository(session).remember_food_choice(
+            user_id, choice_key(question["ids"]), int(choice)
+        )
+
+
+def remembered_note(catalog: Catalog, answered: Sequence[Entry]) -> str:
+    """ "курица → Куриная грудка" for the person, escaped; empty if nothing was answered."""
+    if not answered:
+        return ""
+    pairs = ", ".join(
+        escape(f"{q['text']} → {catalog.get_food(q['chosen']).name_ru}", quote=False)
+        for q in answered
+    )
+    return texts.CHOICE_REMEMBERED.format(items=pairs)
+
+
+async def answer_remembered(
+    message: Message,
+    session_factory: async_sessionmaker[AsyncSession],
+    catalog: Catalog,
+    sure: list[Entry],
+    questions: list[Entry],
+) -> None:
+    """Answer the questions the sender answered before and tell them so (in place)."""
+    user_id = sender_id(message)
+    if user_id is None or not questions:
+        return
+    async with session_factory() as session:
+        choices = await UserRepository(session).get_food_choices(user_id)
+    note = remembered_note(catalog, use_remembered(sure, questions, choices))
+    if note:
+        await message.answer(note)
 
 
 def options_of(catalog: Catalog, question: Entry) -> Sequence[tuple[int, str]]:

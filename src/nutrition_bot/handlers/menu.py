@@ -32,9 +32,11 @@ from nutrition_bot.core.recipe_check import MentionFinder
 from nutrition_bot.db.repositories.users import UserRepository
 from nutrition_bot.handlers import keyboards
 from nutrition_bot.handlers.common import (
+    answer_remembered,
     apply_choice,
     callback_message,
     options_of,
+    remember_choice,
     sender_id,
     split_parse,
     track,
@@ -165,6 +167,7 @@ async def on_products_text(
             texts.MENU_UNKNOWN_NOTE.format(items=html_text(", ".join(result.unknown)))
         )
     sure, questions = split_parse(result)
+    await answer_remembered(message, session_factory, catalog, sure, questions)
     if not sure and not questions:
         await message.answer(texts.MENU_PRODUCTS_AGAIN)
         return
@@ -189,8 +192,11 @@ async def on_pick(
         return
     data = await state.get_data()
     sure, questions = list(data.get("selected", [])), list(data.get("queue", []))
+    choice = callback.data.split(":", 1)[1]
+    if questions:
+        await remember_choice(session_factory, callback.from_user.id, questions[0], choice)
     try:
-        apply_choice(sure, questions, callback.data.split(":", 1)[1])
+        apply_choice(sure, questions, choice)
     except ValueError:
         return
     await state.update_data(selected=sure, queue=questions)

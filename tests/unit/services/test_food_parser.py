@@ -202,3 +202,9 @@ def test_a_dish_with_several_kinds_asks_which() -> None:
         "vareniki_potato",
         "vareniki_cottage",
     }
+
+
+def test_a_salad_of_vegetables_is_the_vegetables_not_lettuce() -> None:
+    assert codes(PARSER.parse("салат из огурцов и помидоров").items) == ["cucumber", "tomato"]
+    assert codes(PARSER.parse("Салат из капусты").items) == ["cabbage_white"]
+    assert codes(PARSER.parse("салат").items) == ["lettuce"]  # on its own it is still lettuce

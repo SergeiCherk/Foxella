@@ -433,8 +433,15 @@ async def test_slip_with_a_list_of_foods_is_confirmed_before_counting(app: BotHa
     await app.onboard()
     await app.say("/slip")
     replies = await app.say("2 банана, 3 яйца")
-    assert "ккал сверх плана" in replies[-1].text
-    assert replies[-1].buttons == ("slipc:yes", "slipc:redo")
+    assert "<b>сверх плана</b> или <b>вместо</b>" in replies[-1].text
+    assert replies[-1].buttons == (
+        "slipc:yes",
+        "slipc:instead:breakfast",
+        "slipc:instead:lunch",
+        "slipc:instead:snack",
+        "slipc:instead:dinner",
+        "slipc:redo",
+    )
     assert "Банан" in replies[-1].text
     done = await app.press("slipc:yes")
     assert done
@@ -451,7 +458,7 @@ async def test_slip_understands_ready_dishes_and_their_measures(app: BotHarness)
     assert "Пицца с сыром — <b>2 куска</b>" in text
     assert "Кола — <b>1 банка</b>" in text
     # 300 g borscht + 220 g pizza + 330 g cola, computed from the catalog
-    assert "ккал сверх плана" in text
+    assert "<b>сверх плана</b> или <b>вместо</b>" in text
 
 
 async def test_slip_redo_asks_again(app: BotHarness) -> None:
@@ -473,13 +480,32 @@ async def test_slip_unknown_food_offers_rough_sizes(app: BotHarness) -> None:
 async def test_slip_ambiguous_food_is_clarified(app: BotHarness) -> None:
     await app.onboard()
     await app.say("/slip")
-    replies = await app.say("творог")
-    assert any(b.startswith("spick:") for b in replies[-1].buttons)
-    choice = next(b for b in replies[-1].buttons if b not in ("spick:all", "spick:skip"))
-    assert "ккал сверх плана" in (await app.press(choice))[-1].text
-    await app.say("/slip")
     await app.say("творог")
     assert (await app.press("spick:skip"))[-1].text.startswith(texts.SLIP_NOTHING[:20])
+    await app.say("/slip")
+    replies = await app.say("творог")  # "skip" was not remembered: asked again
+    assert any(b.startswith("spick:") for b in replies[-1].buttons)
+    choice = next(b for b in replies[-1].buttons if b not in ("spick:all", "spick:skip"))
+    assert "<b>сверх плана</b> или <b>вместо</b>" in (await app.press(choice))[-1].text
+    await app.say("/slip")
+    replies = await app.say("творог")  # now the pick is remembered: no question
+    assert replies[0].text.startswith("🧠 Взяла как в прошлый раз: <i>творог → Творог")
+    assert "<b>сверх плана</b> или <b>вместо</b>" in replies[-1].text
+
+
+async def test_a_remembered_choice_is_used_for_menus_too(app: BotHarness) -> None:
+    await app.onboard()
+    await app.say("/menu")
+    await app.press("days:1")
+    replies = await app.say("курица, гречка")
+    choice = next(b for b in replies[-1].buttons if b.startswith("pick:") and b[5:].isdigit())
+    await app.press(choice)
+    await app.say("/slip")
+    replies = await app.say("курица")
+    assert replies[0].text.startswith("🧠 Взяла как в прошлый раз: <i>курица → ")
+    async with app.session_factory() as session:
+        choices = await UserRepository(session).get_food_choices(1)
+    assert list(choices.values()) == [int(choice[5:])]
 
 
 async def test_slip_button_under_a_menu_starts_the_flow(app: BotHarness) -> None:

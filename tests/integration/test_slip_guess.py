@@ -34,7 +34,7 @@ async def test_unknown_food_is_split_by_the_model_and_shown_for_checking(
     confirm = replies[-1].text
     assert "Макароны (варёные)" in confirm
     assert "Банан" in confirm  # the known food stays as it was
-    assert "ккал сверх плана" in confirm
+    assert "<b>сверх плана</b> или <b>вместо</b>" in confirm
     assert llm.eaten_requests[0].phrases == ("тарелка лагмана",)
     # the model sees only plain foods: no ready dishes, nothing raw
     borscht = next(f.id for f in app.catalog.foods if f.code == "borscht")
