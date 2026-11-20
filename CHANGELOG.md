@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- A menu day is first asked for in one call (`MenuConfig.day_requests`); each meal is checked
+  on its own and only failing meals are asked again one by one, with their problems. A day
+  took 2 calls and 18 s on Qwen3.8 Flash instead of 4+.
+
+### Added
+- Answers to "which one?" ("курица" -> breast) are remembered per person (migration
+  `0006`) and used next time with a short note.
+- "салат из огурцов и помидоров" is cucumbers and tomatoes, not lettuce.
+
+### Fixed
+- A second slip on the same day replaced the first; corrections now add up and the 10 %
+  daily cap applies to the sum.
+- "Instead of a meal" was counted as extra: the confirmation now asks "on top of the plan"
+  or "instead of breakfast/lunch/snack/dinner" and takes that meal's planned kcal off.
+- A slip was always compared with the first day of the menu; now with the menu day that
+  falls on today (by the menu's date).
+
 ### Added
 - Unknown food in "I ate" ("лагман") is split by the model into our foods
   (`core/eaten.py`, `LanguageModel.decompose`); code validates it like menu dishes, computes the

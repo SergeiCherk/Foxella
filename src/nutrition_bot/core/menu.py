@@ -10,7 +10,7 @@ import logging
 import math
 import re
 import time
-from collections.abc import Callable, Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -106,6 +106,15 @@ class MealResult:
     attempts: int  # number of LLM calls made
     problems: tuple[str, ...]  # why the last attempt failed (empty if the LLM succeeded)
     ignored_availability: bool = False  # a fallback dish used foods the user did not list
+
+
+@dataclass(frozen=True, slots=True)
+class DayRequest:
+    """All meals of a day in one call: (meal type, kcal) in order, and what may be used."""
+
+    meals: tuple[tuple[MealType, float], ...]
+    allowed_food_ids: tuple[int, ...]
+    avoid_dish_names: tuple[str, ...] = ()
 
 
 class DishGenerator(Protocol):
@@ -837,6 +846,49 @@ def fallback_dishes(
 # ----------------------------------------------------------- orchestration
 
 
+def _accept_dishes(
+    raw: str,
+    catalog: Catalog,
+    allowed: Sequence[int],
+    avoid: Sequence[str],
+    target_kcal: float,
+    cfg: MenuConfig,
+    rules: DishRules,
+) -> list[Dish]:
+    """Validate the model's dishes for one meal and fit their portions, or raise with reasons."""
+    dishes = parse_dishes(raw, catalog, allowed, cfg, rules)
+    avoid_folded = {n.casefold() for n in avoid}
+    repeated = [d.name for d in dishes if d.name.casefold() in avoid_folded]
+    if repeated:
+        raise InvalidLLMResponseError([f"dish name was already used: {n}" for n in repeated])
+    fitted, reason = fit_portions(catalog, dishes, target_kcal, cfg)
+    if fitted is None:
+        raise InvalidLLMResponseError([reason])
+    return fitted
+
+
+def split_day_answer(raw: str, meal_types: Sequence[MealType]) -> dict[MealType, str]:
+    """The model's whole-day answer as one ``{"dishes": [...]}`` text per meal it answered.
+
+    Expected shape: ``{"meals": [{"meal": "breakfast", "dishes": [...]}, ...]}``. Unknown,
+    repeated or malformed meals are left out (they are then asked for one by one).
+    """
+    data = _extract_json(raw)
+    entries = data.get("meals") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        raise InvalidLLMResponseError(["the top level must be a JSON object with a 'meals' list"])
+    wanted = {m.value: m for m in meal_types}
+    parts: dict[MealType, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        meal_type = wanted.get(str(entry.get("meal", "")))
+        if meal_type is None or meal_type in parts:
+            continue
+        parts[meal_type] = json.dumps({"dishes": entry.get("dishes")}, ensure_ascii=False)
+    return parts
+
+
 async def build_meal(
     generator: DishGenerator,
     catalog: Catalog,
@@ -848,17 +900,18 @@ async def build_meal(
     deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
     rules: DishRules = NO_RULES,
+    feedback: Sequence[str] = (),
 ) -> MealResult:
     """Build one meal: ask the model (with feedback and retries), else use a fallback dish.
 
     ``deadline`` is a ``clock()`` timestamp. A call that is still running at the deadline is
     cancelled and no new call is started: the rest of the meal comes from the fallback dishes.
+    ``feedback``: problems of an earlier answer for this meal (from the whole-day call).
     """
     allowed = tuple(allowed_food_ids)
     avoid = tuple(avoid_names)
-    avoid_folded = {n.casefold() for n in avoid}
-    feedback: tuple[str, ...] = ()
-    problems: tuple[str, ...] = ()
+    hints: tuple[str, ...] = tuple(feedback)
+    problems: tuple[str, ...] = hints
     attempts = 0
 
     for _ in range(1 + cfg.max_llm_retries):
@@ -868,20 +921,12 @@ async def build_meal(
             logger.warning("time limit reached before attempt %d", attempts + 1)
             break
         attempts += 1
-        request = DishRequest(meal_type, target.kcal, allowed, avoid, feedback)
+        request = DishRequest(meal_type, target.kcal, allowed, avoid, hints)
         try:
             raw = await asyncio.wait_for(generator.generate(request), timeout=remaining)
-            dishes = parse_dishes(raw, catalog, allowed, cfg, rules)
-            repeated = [d.name for d in dishes if d.name.casefold() in avoid_folded]
-            if repeated:
-                raise InvalidLLMResponseError(
-                    [f"dish name was already used: {n}" for n in repeated]
-                )
-            fitted, reason = fit_portions(catalog, dishes, target.kcal, cfg)
-            if fitted is None:
-                raise InvalidLLMResponseError([reason])
+            fitted = _accept_dishes(raw, catalog, allowed, avoid, target.kcal, cfg, rules)
         except InvalidLLMResponseError as error:
-            problems = feedback = tuple(error.problems)
+            problems = hints = tuple(error.problems)
             logger.warning(
                 "LLM answer rejected (attempt %d): %d problem(s)", attempts, len(problems)
             )
@@ -918,11 +963,39 @@ async def build_day(
     deadline: float | None = None,
     rules: DishRules = NO_RULES,
 ) -> list[MealResult]:
-    """Build all meals of a day. Dish names already used are not repeated within the day."""
+    """Build all meals of a day. Dish names already used are not repeated within the day.
+
+    With ``cfg.day_requests`` and a generator that has ``generate_day``, the whole day is asked
+    for in one call first; each meal of that answer is checked on its own, and only the meals
+    that fail are asked for again one by one (with the problems found), then fall back.
+    """
     targets = meal_targets(day_target, meal_types, cfg)
     used = list(avoid_names)
+    parts = await _ask_day(generator, targets, allowed_food_ids, cfg, used, deadline)
     results: list[MealResult] = []
     for meal_type in meal_types:
+        feedback: tuple[str, ...] = ()
+        if meal_type in parts:
+            try:
+                fitted = _accept_dishes(
+                    parts[meal_type],
+                    catalog,
+                    allowed_food_ids,
+                    used,
+                    targets[meal_type].kcal,
+                    cfg,
+                    rules,
+                )
+            except InvalidLLMResponseError as error:
+                feedback = tuple(error.problems)
+                logger.info("day answer rejected for %s: %s", meal_type.value, error)
+            else:
+                meal = Meal(meal_type, tuple(fitted))
+                results.append(
+                    MealResult(meal, meal_nutrients(catalog, meal), MealSource.LLM, 1, ())
+                )
+                used += [d.name for d in fitted]
+                continue
         result = await build_meal(
             generator,
             catalog,
@@ -933,10 +1006,41 @@ async def build_day(
             tuple(used),
             deadline,
             rules=rules,
+            feedback=feedback,
         )
         used += [d.name for d in result.meal.dishes]
         results.append(result)
     return results
+
+
+async def _ask_day(
+    generator: DishGenerator,
+    targets: Mapping[MealType, Nutrients],
+    allowed_food_ids: Sequence[int],
+    cfg: MenuConfig,
+    avoid: Sequence[str],
+    deadline: float | None,
+) -> dict[MealType, str]:
+    """One call for the whole day; empty if not possible or not usable."""
+    generate_day = getattr(generator, "generate_day", None)
+    if not cfg.day_requests or generate_day is None:
+        return {}
+    remaining = None if deadline is None else deadline - time.monotonic()
+    if remaining is not None and remaining <= DEADLINE_SLACK_S:
+        return {}
+    request = DayRequest(
+        tuple((m, t.kcal) for m, t in targets.items()), tuple(allowed_food_ids), tuple(avoid)
+    )
+    try:
+        raw = await asyncio.wait_for(generate_day(request), timeout=remaining)
+        return split_day_answer(raw, list(targets))
+    except InvalidLLMResponseError as error:
+        logger.warning("day answer rejected: %s", error)
+    except LLMError as error:
+        logger.warning("LLM call for a whole day failed: %s", error)
+    except TimeoutError:
+        logger.warning("LLM call for a whole day cancelled at the time limit")
+    return {}
 
 
 # ------------------------------------------------------------- availability

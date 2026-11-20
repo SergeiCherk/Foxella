@@ -146,6 +146,30 @@ class UserRepository:
         await self._session.commit()
         return True
 
+    async def get_food_choices(self, telegram_id: int) -> dict[str, int]:
+        """Remembered answers to "which one?": options key (see ``choice_key``) -> food id."""
+        user = await self._session.get(UserORM, telegram_id)
+        if user is None:
+            return {}
+        try:
+            raw = json.loads(user.food_choices or "{}")
+        except ValueError:
+            logger.warning("unreadable food choices of a user, ignoring them")
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): v for k, v in raw.items() if isinstance(v, int)}
+
+    async def remember_food_choice(self, telegram_id: int, key: str, food_id: int) -> None:
+        """Remember that for these options the person means ``food_id``."""
+        user = await self._session.get(UserORM, telegram_id)
+        if user is None:
+            return
+        choices = await self.get_food_choices(telegram_id)
+        choices[key] = food_id
+        user.food_choices = json.dumps(choices, sort_keys=True)
+        await self._session.commit()
+
     async def get_restrictions(self, telegram_id: int) -> list[str]:
         """Food restriction codes ("meat", "nuts", ...); empty for none or an unknown user."""
         user = await self._session.get(UserORM, telegram_id)
@@ -199,7 +223,16 @@ class UserRepository:
             menu = MenuORM(telegram_id=telegram_id, payload="")
             self._session.add(menu)
         menu.payload = menu_to_json(days)
+        menu.created_at = datetime.now(UTC)  # a new menu starts today
         await self._session.commit()
+
+    async def get_menu_created_at(self, telegram_id: int) -> datetime | None:
+        """When the latest menu was made (UTC), or ``None`` if there is no menu."""
+        menu = await self._session.get(MenuORM, telegram_id)
+        if menu is None:
+            return None
+        created = menu.created_at
+        return created if created.tzinfo is not None else created.replace(tzinfo=UTC)
 
     async def get_menu(self, telegram_id: int) -> list[Day] | None:
         """The latest menu, or ``None`` if there is none or it cannot be read."""

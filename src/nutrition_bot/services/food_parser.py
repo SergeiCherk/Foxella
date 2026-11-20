@@ -38,6 +38,8 @@ _WORD_NUMBERS = {
 _NOISE = {"шт", "штука", "x", "х", "с", "со", "из", "на", "в"}
 # "гречка с курицей" is two foods, unless the whole phrase is one alias ("кофе с молоком").
 _WITH = re.compile(r"\s+(?:с|со)\s+")
+# "салат из огурцов": the salad is the vegetables named, not lettuce.
+_SALAD_OF = re.compile(r"^\s*(?:\d+\s*)?(?:порци\w*\s+)?салат\w*\s+из\s+", re.IGNORECASE)
 
 
 @lru_cache(maxsize=1)
@@ -126,6 +128,7 @@ class FoodParser:
 
     def _parse_chunk(self, chunk: str, result: ParseResult) -> None:
         """One item, or several joined by "с": "борщ со сметаной" is borscht and sour cream."""
+        chunk = _SALAD_OF.sub("", chunk)
         parts = [p for p in _WITH.split(chunk) if p.strip()]
         if len(parts) > 1:
             key = self._exact(self._read(chunk)[1])

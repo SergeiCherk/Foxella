@@ -8,6 +8,7 @@ limits is simply left alone: the plan is never tightened further to "pay back" a
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 
 from nutrition_bot.config import SlipConfig
@@ -80,13 +81,16 @@ def plan_slip_correction(
     floor_kcal: float,
     upcoming_planned_kcal: Sequence[float],
     cfg: SlipConfig,
+    already_cut: Sequence[float] = (),
 ) -> SlipResult:
     """Decide how to adjust the next days after a day that differed from the plan.
 
-    ``upcoming_planned_kcal`` holds the planned kcal of the days after the slip, in order.
+    ``upcoming_planned_kcal`` holds the planned kcal of the days after the slip, in order,
+    with earlier corrections already applied. ``already_cut`` (kcal, positive) is what earlier
+    slips took from each of those days: together with the new cut it stays within the daily cap.
     Raises ``InvalidQuantityError`` for negative or non-finite kcal values.
     """
-    for value in (eaten_kcal, planned_kcal, floor_kcal, *upcoming_planned_kcal):
+    for value in (eaten_kcal, planned_kcal, floor_kcal, *upcoming_planned_kcal, *already_cut):
         _check_kcal(value)
     if not math.isfinite(daily_norm_kcal) or daily_norm_kcal <= 0:
         raise InvalidQuantityError(daily_norm_kcal)
@@ -100,7 +104,11 @@ def plan_slip_correction(
 
     days = list(upcoming_planned_kcal[: cfg.spread_days])
     daily_cap = cfg.max_daily_correction * daily_norm_kcal
-    caps = [min(daily_cap, max(0.0, planned - floor_kcal)) for planned in days]
+    taken = [already_cut[i] if i < len(already_cut) else 0.0 for i in range(len(days))]
+    caps = [
+        max(0.0, min(daily_cap - cut, planned - floor_kcal))
+        for planned, cut in zip(days, taken, strict=True)
+    ]
     cuts = _spread(diff, caps)
 
     adjustments = tuple(
@@ -116,6 +124,34 @@ def plan_slip_correction(
     else:
         outcome = SlipOutcome.PARTIAL
     return SlipResult(outcome, diff, adjustments, uncompensated)
+
+
+def eaten_today_kcal(planned_kcal: float, extra_kcal: float, replaced_kcal: float = 0.0) -> float:
+    """What the day came to: the plan, minus a meal that was skipped for this food, plus it."""
+    for value in (planned_kcal, extra_kcal, replaced_kcal):
+        _check_kcal(value)
+    return max(0.0, planned_kcal - replaced_kcal) + extra_kcal
+
+
+def merge_adjustments(existing: Sequence[float], result: SlipResult, days: int) -> list[float]:
+    """Earlier corrections plus the new ones, one number per upcoming day (``days`` long).
+
+    A second slip on the same day adds to the first instead of replacing it.
+    """
+    merged = [existing[i] if i < len(existing) else 0.0 for i in range(days)]
+    for adjustment in result.adjustments:
+        if adjustment.day_offset < days:
+            merged[adjustment.day_offset] += adjustment.delta_kcal
+    return merged
+
+
+def menu_day_index(created_on: date, today: date, days: int) -> int | None:
+    """Which day of a menu made on ``created_on`` is ``today`` (0-based), ``None`` if none.
+
+    A menu starts on the day it is made; after its last day there is no plan to compare with.
+    """
+    index = (today - created_on).days
+    return index if 0 <= index < days else None
 
 
 def apply_adjustment(norm: DailyNorm, delta_kcal: float) -> Nutrients:

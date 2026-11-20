@@ -18,7 +18,7 @@ from nutrition_bot.config import Settings
 from nutrition_bot.core.eaten import EatenAnalyzer, EatenRequest
 from nutrition_bot.core.errors import LLMError, UnknownFoodError
 from nutrition_bot.core.measures import Catalog
-from nutrition_bot.core.menu import DishGenerator, DishRequest
+from nutrition_bot.core.menu import DayRequest, DishGenerator, DishRequest
 from nutrition_bot.core.models import Dish, MealType
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,10 @@ SYSTEM_PROMPT = """\
    варить заново.
 """
 
+
+DAY_FORMAT = """\
+{"meals": [{"meal": "breakfast", "dishes": [{"name": "Название блюда", "recipe": "Короткий рецепт.",
+  "items": [{"food_id": 1, "measure_id": 2, "quantity": 1.5}]}]}]}"""
 
 EATEN_PROMPT = """\
 Ты помогаешь оценить, из чего состоит еда, которую человек уже съел.
@@ -110,6 +114,39 @@ def build_prompt(request: DishRequest, catalog: Catalog) -> tuple[str, str]:
     return SYSTEM_PROMPT, "\n".join(parts)
 
 
+def day_system_prompt() -> str:
+    """The dish rules of ``SYSTEM_PROMPT`` with the whole-day answer format."""
+    one_meal = SYSTEM_PROMPT.split("Формат:\n", 1)[1].split("\n\n", 1)[0]
+    return (
+        SYSTEM_PROMPT.replace(one_meal, DAY_FORMAT)
+        .replace(
+            "Ты помогаешь составлять простые домашние блюда",
+            "Ты помогаешь составлять меню на день: простые домашние блюда",
+        )
+        .replace(
+            "3. От 1 до 3 блюд на приём пищи.",
+            "3. Для каждого приёма пищи из запроса (meal как в запросе) от 1 до 3 блюд; "
+            "названия разные во всём дне.",
+        )
+    )
+
+
+def build_day_prompt(request: DayRequest, catalog: Catalog) -> tuple[str, str]:
+    """``(system, user)`` prompts for all meals of a day in one call."""
+    meals = "; ".join(
+        f"{meal.value} ({MEAL_LABELS[meal]}) примерно {kcal:.0f} ккал"
+        for meal, kcal in request.meals
+    )
+    parts = [
+        f"Приёмы пищи: {meals}. Программа всё равно пересчитает и подгонит порции.",
+        "Доступные продукты:",
+        *_food_lines(catalog, request.allowed_food_ids),
+    ]
+    if request.avoid_dish_names:
+        parts.append("Не повторять блюда: " + "; ".join(request.avoid_dish_names))
+    return day_system_prompt(), "\n".join(parts)
+
+
 def build_eaten_prompt(request: EatenRequest, catalog: Catalog) -> tuple[str, str]:
     """``(system, user)`` prompts for splitting unknown eaten food into our foods."""
     parts = [
@@ -157,12 +194,15 @@ class FakeLLM:
         self,
         responses: Sequence[str | Exception] = (),
         eaten: Sequence[str | Exception] = (),
+        days: Sequence[str | Exception] = (),
     ) -> None:
         self._responses = list(responses)
         self._eaten = list(eaten)
+        self._days = list(days)
         self.requests: list[DishRequest] = []
         self.eaten_requests: list[EatenRequest] = []
-        self.available = bool(self._responses or self._eaten)
+        self.day_requests: list[DayRequest] = []
+        self.available = bool(self._responses or self._eaten or self._days)
 
     async def generate(self, request: DishRequest) -> str:
         """Record the request and return (or raise) the next scripted answer."""
@@ -170,6 +210,16 @@ class FakeLLM:
         if not self._responses:
             raise LLMError("FakeLLM has no more scripted answers")
         item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    async def generate_day(self, request: DayRequest) -> str:
+        """Record the request and return (or raise) the next scripted ``days`` answer."""
+        self.day_requests.append(request)
+        if not self._days:
+            raise LLMError("FakeLLM has no scripted day answers")
+        item = self._days.pop(0)
         if isinstance(item, Exception):
             raise item
         return item
@@ -222,6 +272,10 @@ class OpenAICompatibleLLM:
         on API errors, truncation (``finish_reason == "length"``) or an empty answer.
         """
         return await self._ask(*build_prompt(request, self._catalog))
+
+    async def generate_day(self, request: DayRequest) -> str:
+        """Ask for all meals of a day in one call; same errors as ``generate``."""
+        return await self._ask(*build_day_prompt(request, self._catalog))
 
     async def decompose(self, request: EatenRequest) -> str:
         """Ask the model what unknown eaten food is made of; same errors as ``generate``."""

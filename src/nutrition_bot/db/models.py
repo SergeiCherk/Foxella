@@ -125,6 +125,8 @@ class UserORM(Base):
     )
     # Food restrictions as comma-separated codes of ``DietConfig.rules`` ("meat,nuts").
     restrictions: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Answers to "which one?" as JSON: {"12,14": 12} means "курица" is food 12 for this person.
+    food_choices: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
 
 
 class UserFoodORM(Base):

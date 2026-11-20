@@ -178,6 +178,11 @@ MENU_WORKING = "👩‍🍳 Составляю меню, это займёт д�
 MENU_UNKNOWN_NOTE = "Этого пока нет в моей базе, пропускаю: <i>{items}</i>"
 # {text}: what the person typed, escaped.
 MENU_CLARIFY = "Уточни, пожалуйста: «<b>{text}</b>» это что именно?"
+# {items}: "курица → Куриная грудка (сырая)" pairs, escaped.
+CHOICE_REMEMBERED = (
+    "🧠 Взяла как в прошлый раз: <i>{items}</i>. "
+    "Если сейчас другое, напиши точнее, например «куриное бедро»."
+)
 MENU_CLARIFY_ANY = "Любой из них"
 MENU_CLARIFY_SKIP = "Пропустить"
 MENU_EXTRA_NOTE = (
@@ -249,8 +254,24 @@ SLIP_GUESSED = (
 )
 SLIP_NOTHING = "Из написанного я ничего не узнала 🤔 Можно перечислить проще или выбрать размер 👇"
 SLIP_CONFIRM = (
-    "📝 <b>Поняла так:</b>\n{lines}\n\nПримерно <b>{kcal} ккал сверх плана</b>. Всё верно?"
+    "📝 <b>Поняла так:</b>\n{lines}\n\nВсего примерно <b>{kcal} ккал</b>.\n"
+    "Это было <b>сверх плана</b> или <b>вместо</b> одного из приёмов пищи? 👇"
 )
+BTN_SLIP_EXTRA = "➕ Сверх плана"
+SLIP_INSTEAD_LABELS: dict[MealType, str] = {
+    MealType.BREAKFAST: "🔁 Вместо завтрака",
+    MealType.LUNCH: "🔁 Вместо обеда",
+    MealType.SNACK: "🔁 Вместо перекуса",
+    MealType.DINNER: "🔁 Вместо ужина",
+}
+# {meal}: a SLIP_INSTEAD_MEAL value; {kcal}: that meal in the plan, a whole number.
+SLIP_INSTEAD_NOTE = "Учла, что это было вместо {meal} (по плану около {kcal} ккал)."
+SLIP_INSTEAD_MEAL: dict[MealType, str] = {
+    MealType.BREAKFAST: "завтрака",
+    MealType.LUNCH: "обеда",
+    MealType.SNACK: "перекуса",
+    MealType.DINNER: "ужина",
+}
 SLIP_QUICK_LABELS: dict[str, str] = {
     "small": "🍪 Немного (перекус)",
     "medium": "🍝 Средне (как приём пищи)",

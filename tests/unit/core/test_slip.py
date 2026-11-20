@@ -265,3 +265,60 @@ def test_more_eaten_never_means_less_correction(upcoming: list[float]) -> None:
 def test_days_with_equal_room_get_equal_cuts() -> None:
     result = plan(2330.0, upcoming=[2000.0, 2000.0, 2000.0])
     assert max(cuts(result)) - min(cuts(result)) < 1e-9
+
+
+# --------------------------------------------------------- several slips, "instead", menu day
+
+
+def test_an_earlier_cut_counts_against_the_daily_cap() -> None:
+    from nutrition_bot.core.slip import merge_adjustments
+
+    first = plan(2600.0)  # 600 over: 200 off each of 3 days, the cap
+    before = merge_adjustments([], first, 3)
+    assert before == [-200.0, -200.0, -200.0]
+    second = plan_slip_correction(
+        2500.0, 2000.0, NORM, FLOOR, [NORM + d for d in before], CFG, already_cut=[200.0] * 3
+    )
+    assert second.outcome is SlipOutcome.NO_ROOM  # the days are already at the cap
+    assert merge_adjustments(before, second, 3) == before
+
+
+def test_a_second_slip_adds_to_the_first() -> None:
+    from nutrition_bot.core.slip import merge_adjustments
+
+    before = merge_adjustments([], plan(2300.0), 3)  # 300 over: 100 a day
+    second = plan_slip_correction(
+        2300.0, 2000.0, NORM, FLOOR, [NORM + d for d in before], CFG, already_cut=[100.0] * 3
+    )
+    assert merge_adjustments(before, second, 3) == pytest.approx([-200.0, -200.0, -200.0])
+
+
+def test_merge_pads_and_ignores_days_beyond_the_window() -> None:
+    from nutrition_bot.core.slip import DayAdjustment, merge_adjustments
+
+    result = SlipResult(
+        SlipOutcome.FULL, 50.0, (DayAdjustment(0, -30.0, 0), DayAdjustment(5, -20.0, 0)), 0
+    )
+    assert merge_adjustments([-10.0], result, 2) == [-40.0, 0.0]
+
+
+def test_eaten_instead_of_a_meal_takes_that_meal_off() -> None:
+    from nutrition_bot.core.slip import eaten_today_kcal
+
+    assert eaten_today_kcal(2000.0, 900.0) == 2900.0  # on top of the plan
+    assert eaten_today_kcal(2000.0, 900.0, replaced_kcal=700.0) == 2200.0
+    assert eaten_today_kcal(500.0, 100.0, replaced_kcal=700.0) == 100.0  # never below zero
+    with pytest.raises(InvalidQuantityError):
+        eaten_today_kcal(2000.0, -1.0)
+
+
+def test_the_menu_day_is_found_by_date() -> None:
+    from datetime import date
+
+    from nutrition_bot.core.slip import menu_day_index
+
+    made = date(2026, 11, 20)
+    assert menu_day_index(made, date(2026, 11, 20), 3) == 0
+    assert menu_day_index(made, date(2026, 11, 22), 3) == 2
+    assert menu_day_index(made, date(2026, 11, 23), 3) is None  # the menu is over
+    assert menu_day_index(made, date(2026, 11, 19), 3) is None  # clock went back

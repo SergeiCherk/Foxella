@@ -122,8 +122,18 @@ def slip_quick_keyboard() -> InlineKeyboardMarkup:
 
 
 def slip_confirm_keyboard() -> InlineKeyboardMarkup:
-    """Confirm the understood list or start over."""
-    return _build([[(texts.BTN_YES, "slipc:yes"), (texts.BTN_REDO, "slipc:redo")]])
+    """On top of the plan, instead of one meal, or start over."""
+    instead = [
+        (label, f"slipc:instead:{meal.value}") for meal, label in texts.SLIP_INSTEAD_LABELS.items()
+    ]
+    return _build(
+        [
+            [(texts.BTN_SLIP_EXTRA, "slipc:yes")],
+            instead[:2],
+            instead[2:],
+            [(texts.BTN_REDO, "slipc:redo")],
+        ]
+    )
 
 
 def profile_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
