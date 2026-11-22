@@ -106,11 +106,28 @@ BTN_NAV_MENU = "🍽 Меню"
 BTN_NAV_SHOPPING = "🛒 Покупки"
 BTN_NAV_SLIP = "🔄 Не по плану"
 BTN_NAV_PROFILE = "👤 Профиль"
-NAV_LABELS = (BTN_NAV_MENU, BTN_NAV_SHOPPING, BTN_NAV_SLIP, BTN_NAV_PROFILE)
+BTN_NAV_FEEDBACK = "💬 Отзыв или жалоба"
+NAV_LABELS = (BTN_NAV_MENU, BTN_NAV_SHOPPING, BTN_NAV_SLIP, BTN_NAV_PROFILE, BTN_NAV_FEEDBACK)
 NAV_HINT = (
-    "👇 Кнопки внизу теперь всегда под рукой: меню, покупки, «Не по плану» и профиль "
-    "в одно касание."
+    "👇 Кнопки внизу теперь всегда под рукой: меню, покупки, «Не по плану», профиль "
+    "и обратная связь в одно касание."
 )
+
+FEEDBACK_TITLE = "💬 <b>Обратная связь</b>"
+FEEDBACK_CHOOSE = "Что хочешь отправить?"
+FEEDBACK_REVIEW = "⭐ Отзыв"
+FEEDBACK_COMPLAINT = "⚠️ Жалоба"
+FEEDBACK_CANCEL = "↩️ Отмена"
+FEEDBACK_ASK_REVIEW = (
+    "Напиши отзыв одним сообщением. Можно рассказать, что понравилось или что улучшить."
+)
+FEEDBACK_ASK_COMPLAINT = "Опиши проблему одним сообщением. Я передам её владельцу бота."
+FEEDBACK_SENT = "Спасибо! Сообщение отправлено владельцу бота 💛"
+FEEDBACK_UNAVAILABLE = "Сейчас обратная связь временно недоступна. Попробуй позже."
+FEEDBACK_CANCELLED = "Обратную связь отменили."
+FEEDBACK_ADMIN_REVIEW = "⭐ <b>Новый отзыв</b> от пользователя <code>{user_id}</code>\n\n{text}"
+FEEDBACK_ADMIN_COMPLAINT = "⚠️ <b>Новая жалоба</b> от пользователя <code>{user_id}</code>\n\n{text}"
+FEEDBACK_TOO_LONG = "Сообщение слишком длинное. Напиши его короче, пожалуйста."
 ASK_SEX = (
     "Давай познакомимся, это займёт минуту ⏱\n"
     "Я посчитаю твою норму калорий и БЖУ.\n\n"
@@ -456,6 +473,7 @@ BOT_COMMANDS: dict[str, str] = {
     "slip": "Было не по плану",
     "profile": "Мои данные",
     "delete_me": "Удалить все мои данные",
+    "feedback": "Оставить отзыв или жалобу",
 }
 SHOPPING_ALL_OWNED = (
     "🎉 Всё, что нужно для этого меню, у тебя уже есть. Покупать ничего не придётся!"

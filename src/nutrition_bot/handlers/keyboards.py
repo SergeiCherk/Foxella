@@ -24,6 +24,7 @@ def main_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=texts.BTN_NAV_MENU), KeyboardButton(text=texts.BTN_NAV_SHOPPING)],
             [KeyboardButton(text=texts.BTN_NAV_SLIP), KeyboardButton(text=texts.BTN_NAV_PROFILE)],
+            [KeyboardButton(text=texts.BTN_NAV_FEEDBACK)],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -156,3 +157,19 @@ def delete_keyboard() -> InlineKeyboardMarkup:
 def admin_keyboard() -> InlineKeyboardMarkup:
     """Under the /admin statistics."""
     return _build([[(texts.BTN_ADMIN_REFRESH, "admin:refresh")]])
+
+
+def feedback_keyboard() -> InlineKeyboardMarkup:
+    """Choose a review, a complaint, or cancel."""
+    return _build(
+        [
+            [(texts.FEEDBACK_REVIEW, "feedback:review")],
+            [(texts.FEEDBACK_COMPLAINT, "feedback:complaint")],
+            [(texts.FEEDBACK_CANCEL, "feedback:cancel")],
+        ]
+    )
+
+
+def feedback_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Cancel while the person is writing a feedback message."""
+    return _build([[(texts.FEEDBACK_CANCEL, "feedback:cancel")]])
