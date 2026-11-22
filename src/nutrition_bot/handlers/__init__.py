@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, ErrorEvent, Message
 from nutrition_bot import texts
 from nutrition_bot.handlers import (
     admin,
+    feedback,
     goal,
     menu,
     onboarding,
@@ -26,7 +27,17 @@ def build_router() -> Router:
     root = Router(name="root")
     # A router's own handlers run before those of the routers included in it, so the catch-all
     # lives in a router of its own that is included last.
-    for module in (admin, onboarding, profile, restrictions, goal, menu, shopping, slip):
+    for module in (
+        admin,
+        feedback,
+        onboarding,
+        profile,
+        restrictions,
+        goal,
+        menu,
+        shopping,
+        slip,
+    ):
         child = Router(name=module.__name__.rsplit(".", 1)[-1])
         module.register(child)
         root.include_router(child)

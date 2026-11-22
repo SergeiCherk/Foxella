@@ -36,3 +36,10 @@ class GoalCheck(StatesGroup):
 
     target = State()
     weeks = State()
+
+
+class FeedbackFlow(StatesGroup):
+    """A short review or complaint sent to the bot owner."""
+
+    kind = State()
+    text = State()

@@ -68,7 +68,7 @@ async def test_run_prepares_everything_then_polls_and_cleans_up(
     monkeypatch.setattr(Dispatcher, "start_polling", fake_polling)
     settings = Settings(_env_file=None, bot_token="123:abc", database_url=db_url)  # type: ignore[call-arg]
     await run(settings)
-    assert calls == ["bot:123:abc:html=True", "commands:6", "polling", "closed"]
+    assert calls == ["bot:123:abc:html=True", "commands:7", "polling", "closed"]
     assert (tmp_path / "run.db").exists()
 
 

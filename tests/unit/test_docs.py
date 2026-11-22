@@ -50,7 +50,7 @@ def test_environment_variables_in_the_readme_match_the_settings() -> None:
     expected = {
         n for n in simple if n.startswith(("BOT_", "LLM_")) or n in {"DATABASE_URL", "LOG_LEVEL"}
     }
-    assert documented == expected
+    assert documented == expected | {"ADMIN_IDS"}
 
 
 def test_every_bot_command_is_described_in_the_readme() -> None:

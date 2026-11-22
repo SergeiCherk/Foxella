@@ -73,7 +73,7 @@ sh scripts/backup_db.sh          # копия в /opt/foxella/backups, хран�
 | Журнал | `docker compose logs -f --tail 100 bot` |
 | Перезапустить | `docker compose restart bot` |
 | Остановить | `docker compose down` (данные остаются) |
-| Статистика в Telegram | `/admin` боту (ваш id в `ADMIN_IDS` в `.env`, потом `docker compose up -d`) |
+| Статистика и обращения в Telegram | `/admin` и отзывы приходят владельцу из `ADMIN_IDS` в `.env`, затем `docker compose up -d` |
 | Статистика беты | `docker compose exec bot python scripts/beta_report.py` |
 | Состояние | `docker compose ps` |
 
