@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutrition_bot.core.metrics import UserFacts
 from nutrition_bot.core.models import (
     ActivityLevel,
     Dish,
@@ -89,6 +90,21 @@ class UserRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def all_facts(self) -> list[UserFacts]:
+        """When each person joined, their goal, sex and whether they set restrictions (UTC)."""
+        rows = await self._session.execute(
+            select(UserORM.created_at, UserORM.goal, UserORM.sex, UserORM.restrictions)
+        )
+        return [
+            UserFacts(
+                created_at if created_at.tzinfo else created_at.replace(tzinfo=UTC),
+                goal,
+                sex,
+                bool(restrictions),
+            )
+            for created_at, goal, sex, restrictions in rows.all()
+        ]
 
     async def get_profile(self, telegram_id: int) -> Profile | None:
         """The saved profile, or ``None`` for a new user."""

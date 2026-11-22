@@ -151,3 +151,8 @@ def profile_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
 def delete_keyboard() -> InlineKeyboardMarkup:
     """Confirmation of /delete_me."""
     return _build([[(texts.BTN_YES_DELETE, "del:yes"), (texts.BTN_CANCEL, "del:no")]])
+
+
+def admin_keyboard() -> InlineKeyboardMarkup:
+    """Under the /admin statistics."""
+    return _build([[(texts.BTN_ADMIN_REFRESH, "admin:refresh")]])

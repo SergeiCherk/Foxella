@@ -21,6 +21,7 @@ class EventName(StrEnum):
     ONBOARDING_DONE = "onboarding_done"  # a new person finished the questions
     MENU_RECEIVED = "menu_received"  # a menu was built and sent
     SLIP_PRESSED = "slip_pressed"  # the person started the "ate something else" flow
+    SHOPPING_RECEIVED = "shopping_received"  # a shopping list was built and sent
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,4 +91,70 @@ def summarize(
         users=len(by_user),
         by_event={name: len(people) for name, people in people_by_event.items()},
         returns=tuple(returns),
+    )
+
+
+PERIOD_DAYS = (1, 7, 30)  # "today", "this week", "this month" of the admin overview (rolling)
+ACTIONS_DAYS = 7  # actions in the overview are counted over the last week
+
+
+@dataclass(frozen=True, slots=True)
+class UserFacts:
+    """What the admin overview needs of one person: no id, no profile numbers."""
+
+    created_at: datetime  # timezone-aware
+    goal: str
+    sex: str
+    has_restrictions: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ActionCount:
+    """How often something happened in the last week and how many people did it."""
+
+    times: int
+    people: int
+
+
+@dataclass(frozen=True, slots=True)
+class Overview:
+    """Aggregates for the bot owner. Only counts, never anything that points to a person."""
+
+    users: int
+    new: tuple[int, ...]  # people who joined in each of ``PERIOD_DAYS``
+    active: tuple[int, ...]  # people with an event in each of ``PERIOD_DAYS``
+    actions: dict[EventName, ActionCount]  # over the last ``ACTIONS_DAYS``
+    goals: dict[str, int]
+    sexes: dict[str, int]
+    with_restrictions: int
+    returns: tuple[WeekReturn, ...]
+
+
+def overview(users: Iterable[UserFacts], events: Sequence[UsageEvent], now: datetime) -> Overview:
+    """Count people and actions for the admin panel; ``now`` is passed in for reproducibility.
+
+    Periods are rolling ("the last 24 hours", "the last 7 days"), so the numbers do not depend
+    on the time zone of the person reading them.
+    """
+    people = list(users)
+    starts = [now - timedelta(days=days) for days in PERIOD_DAYS]
+    week_start = now - timedelta(days=ACTIONS_DAYS)
+    actions: dict[EventName, ActionCount] = {}
+    for name in EventName:
+        recent = [e for e in events if e.name is name and e.at >= week_start]
+        actions[name] = ActionCount(len(recent), len({e.user_id for e in recent}))
+    goals: dict[str, int] = defaultdict(int)
+    sexes: dict[str, int] = defaultdict(int)
+    for person in people:
+        goals[person.goal] += 1
+        sexes[person.sex] += 1
+    return Overview(
+        users=len(people),
+        new=tuple(sum(p.created_at >= start for p in people) for start in starts),
+        active=tuple(len({e.user_id for e in events if e.at >= start}) for start in starts),
+        actions=actions,
+        goals=dict(goals),
+        sexes=dict(sexes),
+        with_restrictions=sum(p.has_restrictions for p in people),
+        returns=summarize(events, now).returns,
     )

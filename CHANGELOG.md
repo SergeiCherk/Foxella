@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Admin
+- `/admin` for the owner (Telegram ids in `ADMIN_IDS`): people in total, new and active in
+  the last 24 hours / 7 / 30 days, menus, shopping lists and slips of the last week, who
+  came back in weeks 2 and 3, goals, sex, restrictions, whether the model is connected.
+  Counts only, no ids. For everyone else the command does not exist.
+- New usage event `shopping_received` (a shopping list was sent).
+
 ### Licence
 - The project is proprietary from now on: all rights reserved (`LICENSE`). Versions published
   before under MIT stay MIT for those who obtained them then.

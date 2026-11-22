@@ -218,6 +218,7 @@ uv run python scripts/validate_data.py           # проверка CSV с пр�
 uv run python scripts/import_usda.py             # сверка с USDA (--write обновит foods.csv)
 uv run python scripts/seed_db.py                 # заполнить базу вручную
 uv run python scripts/beta_report.py              # отчёт беты: сколько людей и кто вернулся
+# или /admin в самом боте, если ваш Telegram id указан в ADMIN_IDS
 uv run python -m tests.render_examples           # пересоздать примеры диалогов
 ```
 

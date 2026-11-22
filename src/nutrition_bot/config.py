@@ -6,10 +6,10 @@ Values marked ASSUMPTION were approved by the project owner in Stage 1.
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WELCOME_IMAGE = Path(__file__).resolve().parent / "assets" / "welcome.jpg"
@@ -338,6 +338,9 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 90.0
     database_url: str = "sqlite+aiosqlite:///./nutrition_bot.db"
     log_level: str = "INFO"
+    # Telegram ids that may use /admin, comma-separated in .env ("ADMIN_IDS=123,456").
+    # Everyone else gets the usual "I do not understand", as if the command did not exist.
+    admin_ids: Annotated[frozenset[int], NoDecode] = frozenset()
 
     norms: NormsConfig = Field(default_factory=NormsConfig)
     slip: SlipConfig = Field(default_factory=SlipConfig)
@@ -347,6 +350,14 @@ class Settings(BaseSettings):
     parser: ParserConfig = Field(default_factory=ParserConfig)
     preset: PresetConfig = Field(default_factory=PresetConfig)
     diet: DietConfig = Field(default_factory=DietConfig)
+
+    @field_validator("admin_ids", mode="before")
+    @classmethod
+    def _split_admin_ids(cls, value: Any) -> Any:
+        """ "123, 456" -> {123, 456}; an empty value means no admins."""
+        if isinstance(value, str):
+            return frozenset(int(part) for part in value.replace(" ", "").split(",") if part)
+        return value
 
 
 @lru_cache

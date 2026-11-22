@@ -544,3 +544,32 @@ MENU_EMPTY_RESTRICTED = (
 MENU_BUSY = "⏳ Меню ещё собирается, подожди немного 🙂"
 MENU_COOLDOWN = "⏳ Давай чуть подождём: новое меню можно составить через {seconds} с."
 STALE_BUTTON = "Эта кнопка уже не работает 🙂 Начни заново командой /menu или /start."
+
+
+# --- /admin: the owner's statistics (only counts, never who) ---
+
+ADMIN_TITLE = "📊 <b>Статистика Foxella</b>\n<i>{now} UTC · сутки, 7 и 30 дней назад до сейчас</i>"
+ADMIN_USERS = "👥 <b>Пользователи</b>\nВсего: <b>{total}</b>\nНовых: {day} · {week} · {month}"
+ADMIN_ACTIVE = "🔥 <b>Активные</b>\n{day} · {week} · {month}"
+ADMIN_ACTIONS_TITLE = "🍽 <b>За неделю</b>"
+ADMIN_ACTION_LINE = "{label}: {times} (людей: {people})"
+ADMIN_ACTION_LABELS: dict[str, str] = {
+    "onboarding_done": "Прошли знакомство",
+    "menu_received": "Получили меню",
+    "shopping_received": "Списки покупок",
+    "slip_pressed": "«Было не по плану»",
+}
+ADMIN_RETURNS_TITLE = "🔁 <b>Возвращаются</b>"
+ADMIN_RETURN_LINE = "На {week}-й неделе: {returned} из {eligible} ({share} %)"
+ADMIN_RETURN_NOBODY = "На {week}-й неделе: пока никто не дошёл"
+ADMIN_PEOPLE_TITLE = "🎯 <b>Кто они</b>"
+ADMIN_GOALS = "Похудеть {lose} · держать форму {maintain} · набрать {gain}"
+ADMIN_SEXES = "Женщин {female} · мужчин {male}"
+ADMIN_RESTRICTIONS = "С ограничениями в еде: {count}"
+ADMIN_LLM_ON = "🤖 ИИ подключён: <code>{model}</code>"
+ADMIN_LLM_OFF = "🤖 ИИ не подключён: меню из встроенных блюд"
+ADMIN_NOTE = (
+    "<i>Активные — те, кто прошёл знакомство, получил меню или список покупок либо отметил"
+    " «было не по плану». Кто удалил свои данные, в счёт не идёт.</i>"
+)
+BTN_ADMIN_REFRESH = "🔄 Обновить"
