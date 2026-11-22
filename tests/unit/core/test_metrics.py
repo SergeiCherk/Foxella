@@ -4,10 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from nutrition_bot.core.metrics import EventName, UsageEvent, summarize
+from nutrition_bot.core.metrics import EventName, UsageEvent, UserFacts, overview, summarize
 
 START = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 ONB, MENU, SLIP = EventName.ONBOARDING_DONE, EventName.MENU_RECEIVED, EventName.SLIP_PRESSED
+SHOP = EventName.SHOPPING_RECEIVED
 
 
 def event(user: int, name: EventName, days: float = 0.0) -> UsageEvent:
@@ -17,7 +18,7 @@ def event(user: int, name: EventName, days: float = 0.0) -> UsageEvent:
 def test_no_events_give_an_empty_summary() -> None:
     summary = summarize([], START + timedelta(days=100))
     assert summary.users == 0
-    assert summary.by_event == {ONB: 0, MENU: 0, SLIP: 0}
+    assert summary.by_event == {ONB: 0, MENU: 0, SLIP: 0, SHOP: 0}
     assert [(r.week, r.eligible, r.returned) for r in summary.returns] == [(2, 0, 0), (3, 0, 0)]
 
 
@@ -32,7 +33,7 @@ def test_people_are_counted_once_per_event_name() -> None:
     ]
     summary = summarize(events, START + timedelta(days=3))
     assert summary.users == 2
-    assert summary.by_event == {ONB: 2, MENU: 1, SLIP: 1}
+    assert summary.by_event == {ONB: 2, MENU: 1, SLIP: 1, SHOP: 0}
 
 
 @pytest.mark.parametrize(
@@ -83,3 +84,40 @@ def test_other_weeks_can_be_asked_for() -> None:
 def test_week_one_and_below_make_no_sense(week: int) -> None:
     with pytest.raises(ValueError, match="start at 2"):
         summarize([], START, weeks=(week,))
+
+
+def person(
+    days_ago: float, goal: str = "lose", sex: str = "female", restricted: bool = False
+) -> UserFacts:
+    return UserFacts(NOW - timedelta(days=days_ago), goal, sex, restricted)
+
+
+NOW = START + timedelta(days=40)
+
+
+def test_overview_counts_new_people_in_rolling_periods() -> None:
+    people = [person(0.5), person(3, "gain", "male"), person(20, restricted=True), person(39)]
+    stats = overview(people, [], NOW)
+    assert stats.users == 4
+    assert stats.new == (1, 2, 3)  # last 24 h, 7 days, 30 days
+    assert stats.goals == {"lose": 3, "gain": 1}
+    assert stats.sexes == {"female": 3, "male": 1}
+    assert stats.with_restrictions == 1
+
+
+def test_overview_counts_active_people_and_last_week_actions() -> None:
+    at = NOW - START  # event(..., days) is measured from START
+    days = at.days
+    events = [
+        event(1, MENU, days - 0.1),  # an hour or two ago
+        event(1, MENU, days - 0.2),
+        event(2, SHOP, days - 3),
+        event(3, SLIP, days - 10),  # active this month, not this week
+        event(4, ONB, days - 35),  # outside every period
+    ]
+    stats = overview([], events, NOW)
+    assert stats.active == (1, 2, 3)
+    assert (stats.actions[MENU].times, stats.actions[MENU].people) == (2, 1)
+    assert (stats.actions[SHOP].times, stats.actions[SHOP].people) == (1, 1)
+    assert stats.actions[SLIP].times == 0
+    assert [r.week for r in stats.returns] == [2, 3]

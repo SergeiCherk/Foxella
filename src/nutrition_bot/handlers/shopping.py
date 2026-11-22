@@ -13,9 +13,10 @@ from nutrition_bot.config import Settings
 from nutrition_bot.core.errors import NutritionError
 from nutrition_bot.core.measures import Catalog
 from nutrition_bot.core.menu import staple_food_ids
+from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.shopping import build_shopping_list
 from nutrition_bot.db.repositories.users import UserRepository
-from nutrition_bot.handlers.common import callback_message, sender_id
+from nutrition_bot.handlers.common import callback_message, sender_id, track
 from nutrition_bot.handlers.render import pack, render_shopping
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ async def send_shopping(
         return
     for text in pack(render_shopping(items, len(menu))):
         await target.answer(text)
+    await track(session_factory, user_id, EventName.SHOPPING_RECEIVED)
 
 
 async def cmd_shopping(

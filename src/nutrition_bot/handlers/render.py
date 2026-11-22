@@ -5,6 +5,7 @@ appear. Nutrients shown to the user are the ones computed by code.
 """
 
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from functools import lru_cache
 from html import escape
 
@@ -14,6 +15,7 @@ from pymorphy3.analyzer import Parse
 from nutrition_bot import texts
 from nutrition_bot.core.balance import BalanceHint
 from nutrition_bot.core.measures import Catalog
+from nutrition_bot.core.metrics import Overview
 from nutrition_bot.core.models import DishItem, Food, FoodCategory, Meal, Nutrients
 from nutrition_bot.core.nutrition import day_nutrients, dish_nutrients, meal_nutrients
 from nutrition_bot.core.shopping import ShoppingItem
@@ -251,3 +253,47 @@ def pack(blocks: Iterable[str], limit: int = TELEGRAM_LIMIT) -> list[str]:
     if current:
         messages.append(current)
     return messages
+
+
+def render_overview(stats: Overview, now: datetime, llm_model: str | None) -> str:
+    """The /admin message (HTML). ``llm_model`` is ``None`` when no model is connected."""
+    day, week, month = stats.new
+    lines = [
+        texts.ADMIN_TITLE.format(now=now.strftime("%d.%m.%Y %H:%M")),
+        "",
+        texts.ADMIN_USERS.format(total=stats.users, day=day, week=week, month=month),
+        "",
+        texts.ADMIN_ACTIVE.format(day=stats.active[0], week=stats.active[1], month=stats.active[2]),
+        "",
+        texts.ADMIN_ACTIONS_TITLE,
+    ]
+    for name, label in texts.ADMIN_ACTION_LABELS.items():
+        count = next(c for event, c in stats.actions.items() if event.value == name)
+        lines.append(
+            texts.ADMIN_ACTION_LINE.format(label=label, times=count.times, people=count.people)
+        )
+    lines += ["", texts.ADMIN_RETURNS_TITLE]
+    for item in stats.returns:
+        if item.eligible == 0:
+            lines.append(texts.ADMIN_RETURN_NOBODY.format(week=item.week))
+        else:
+            share = round(100 * item.returned / item.eligible)
+            lines.append(
+                texts.ADMIN_RETURN_LINE.format(
+                    week=item.week, returned=item.returned, eligible=item.eligible, share=share
+                )
+            )
+    goals = {goal: stats.goals.get(goal, 0) for goal in ("lose", "maintain", "gain")}
+    sexes = {sex: stats.sexes.get(sex, 0) for sex in ("female", "male")}
+    lines += [
+        "",
+        texts.ADMIN_PEOPLE_TITLE,
+        texts.ADMIN_GOALS.format(**goals),
+        texts.ADMIN_SEXES.format(**sexes),
+        texts.ADMIN_RESTRICTIONS.format(count=stats.with_restrictions),
+        "",
+        texts.ADMIN_LLM_ON.format(model=html_text(llm_model)) if llm_model else texts.ADMIN_LLM_OFF,
+        "",
+        texts.ADMIN_NOTE,
+    ]
+    return "\n".join(lines)
