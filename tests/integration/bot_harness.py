@@ -11,7 +11,7 @@ from typing import Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import SendMessage, SendPhoto, TelegramMethod
+from aiogram.methods import EditMessageText, SendMessage, SendPhoto, TelegramMethod
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup, Update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -121,7 +121,7 @@ class BotHarness:
     def _new_replies(self) -> list[Reply]:
         replies: list[Reply] = []
         for method in self.session.requests[self._seen :]:
-            if not isinstance(method, SendMessage | SendPhoto):
+            if not isinstance(method, EditMessageText | SendMessage | SendPhoto):
                 continue
             markup = method.reply_markup
             data: list[str] = []

@@ -24,7 +24,6 @@ def main_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=texts.BTN_NAV_MENU), KeyboardButton(text=texts.BTN_NAV_SHOPPING)],
             [KeyboardButton(text=texts.BTN_NAV_SLIP), KeyboardButton(text=texts.BTN_NAV_PROFILE)],
-            [KeyboardButton(text=texts.BTN_NAV_FEEDBACK)],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -144,6 +143,7 @@ def profile_keyboard(goal: Goal | None = None) -> InlineKeyboardMarkup:
             [(texts.BTN_EDIT_PROFILE, "profile:edit")],
             *_goal_rows(goal),
             [(texts.BTN_RESTRICTIONS, "diet:show")],
+            [(texts.BTN_NAV_FEEDBACK, "feedback:open")],
             [(texts.BTN_DELETE, "del:ask")],
         ]
     )

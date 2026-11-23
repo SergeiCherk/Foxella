@@ -31,7 +31,7 @@ async def stored_profile(app: BotHarness, user_id: int = 1) -> Profile | None:
 
 
 async def make_menu(app: BotHarness, days: int = 1, pantry: str | None = None) -> list[Reply]:
-    await app.say("/menu")
+    await app.press("menu:start")
     await app.press(f"days:{days}")
     if pantry is None:
         return await app.press("pantry:any")
@@ -214,10 +214,11 @@ async def test_menu_for_any_products_shows_household_measures_only(app: BotHarne
     assert "День 1" in text
     for meal in ("Завтрак", "Обед", "Перекус", "Ужин"):
         assert meal in text
-    items = [line for line in text.splitlines() if line.startswith("• ")]
+    detail = joined(await app.press(replies[-1].buttons[0]))
+    items = [line for line in detail.splitlines() if " — <b>" in line]
     assert items
     assert not [line for line in items if re.search(r"\d\s*(г|гр|грамм|кг|мл)\b", line)]
-    assert replies[-1].buttons == ("shop:show", "slip:start")
+    assert {"shop:show", "slip:start", "menu:start"} <= set(replies[-1].buttons)
     async with app.session_factory() as session:
         menu = await UserRepository(session).get_menu(1)
     assert menu is not None
@@ -230,7 +231,7 @@ async def test_menu_calories_are_computed_by_code_and_close_to_the_norm(
     await app.onboard()
     text = joined(await make_menu(app))
     target = calculate_daily_norm(PROFILE, settings.norms).target.kcal
-    shown = int(re.search(r"День 1</b>\n🔥 <b>(\d+) ккал", text).group(1))  # type: ignore[union-attr]
+    shown = int(re.search(r"День 1 из 1</b>\n🔥 <b>(\d+) ккал", text).group(1))  # type: ignore[union-attr]
     assert abs(shown - target) / target < 0.12
 
 
@@ -238,7 +239,13 @@ async def test_menu_for_three_days_uses_the_users_products(app: BotHarness) -> N
     await app.onboard()
     replies = await make_menu(app, days=3, pantry="гречка, куриная грудка, огурцы, яйца, брокколи")
     text = joined(replies)
-    assert all(f"День {n}" in text for n in (1, 2, 3))
+    assert "День 1 из 3" in text
+    for day in (2, 3):
+        button = next(
+            b for b in replies[-1].buttons if b.endswith(f":{day - 1}") and b.count(":") == 2
+        )
+        replies = await app.press(button)
+        assert f"День {day} из 3" in joined(replies)
     async with app.session_factory() as session:
         repo = UserRepository(session)
         pantry = await repo.get_pantry(1)
@@ -270,7 +277,7 @@ async def test_clarify_any_adds_every_option_and_skip_adds_none(app: BotHarness)
     assert "День 1" in joined(final)
     async with app.session_factory() as session:
         assert len(await UserRepository(session).get_pantry(1)) >= 3
-    await app.say("/menu")
+    await app.press("menu:start")
     await app.press("days:1")
     await app.say("сыр")
     final = await app.press("pick:skip")
@@ -300,10 +307,10 @@ async def test_only_unknown_products_ask_again_and_stay_in_the_step(app: BotHarn
 async def test_same_products_as_last_time(app: BotHarness) -> None:
     await app.onboard()
     await make_menu(app, pantry="гречка, куриная грудка")
-    await app.say("/menu")
+    await app.press("menu:start")
     replies = await app.press("days:2")
     assert "pantry:last" in replies[-1].buttons
-    assert "День 2" in joined(await app.press("pantry:last"))
+    assert "День 1 из 2" in joined(await app.press("pantry:last"))
     async with app.session_factory() as session:
         assert len(await UserRepository(session).get_pantry(1)) == 2
 
@@ -405,7 +412,7 @@ async def test_tiny_excess_changes_nothing(app: BotHarness) -> None:
 
 
 async def day_kcal(replies: list[Reply]) -> int:
-    match = re.search(r"День 1</b>\n🔥 <b>(\d+) ккал", joined(replies))
+    match = re.search(r"День 1 из 1</b>\n🔥 <b>(\d+) ккал", joined(replies))
     assert match is not None
     return int(match.group(1))
 
@@ -530,7 +537,13 @@ async def test_profile_view_and_edit(app: BotHarness, settings: Settings) -> Non
     assert "168" in replies[-1].text
     assert "64,5" in replies[-1].text
     assert str(round(calculate_daily_norm(PROFILE, settings.norms).target.kcal)) in replies[-1].text
-    assert set(replies[-1].buttons) == {"profile:edit", "goalcheck:start", "diet:show", "del:ask"}
+    assert set(replies[-1].buttons) == {
+        "profile:edit",
+        "goalcheck:start",
+        "diet:show",
+        "feedback:open",
+        "del:ask",
+    }
     assert (await app.press("profile:edit"))[-1].text == texts.ASK_SEX
 
 

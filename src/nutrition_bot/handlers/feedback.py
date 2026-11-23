@@ -11,7 +11,7 @@ from aiogram.types import CallbackQuery, Message
 
 from nutrition_bot import texts
 from nutrition_bot.config import Settings
-from nutrition_bot.handlers import keyboards
+from nutrition_bot.handlers import keyboards, menu_cards
 from nutrition_bot.handlers.common import callback_message, sender_id
 from nutrition_bot.handlers.states import FeedbackFlow
 
@@ -36,9 +36,34 @@ async def cmd_feedback(message: Message, state: FSMContext) -> None:
     await start_feedback(message, state)
 
 
-async def on_feedback_button(message: Message, state: FSMContext) -> None:
-    """The permanent feedback button."""
-    await start_feedback(message, state)
+async def on_feedback_button(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    if (message := callback_message(callback)) is not None:
+        await start_feedback(message, state)
+
+
+async def on_report(
+    callback: CallbackQuery, state: FSMContext, session_factory: menu_cards.SessionFactory
+) -> None:
+    message = callback_message(callback)
+    parts = (callback.data or "").split(":")
+    saved = (
+        await menu_cards.load_card(session_factory, callback.from_user.id, parts[:-1])
+        if message is not None and len(parts) == 5
+        else None
+    )
+    if message is None or saved is None or (index := saved[3]) is None:
+        await callback.answer(texts.STALE_BUTTON)
+        return
+    await callback.answer()
+    days, _, day, _ = saved
+    dish = [dish for meal in days[day] for dish in meal.dishes][index]
+    await state.clear()
+    await state.set_data({"kind": "complaint", "dish_context": f"День {day + 1}: {dish.name}"})
+    await state.set_state(FeedbackFlow.text)
+    await message.answer(
+        texts.FEEDBACK_ASK_COMPLAINT, reply_markup=keyboards.feedback_cancel_keyboard()
+    )
 
 
 async def on_kind(callback: CallbackQuery, state: FSMContext) -> None:
@@ -89,7 +114,9 @@ async def on_text(message: Message, state: FSMContext, settings: Settings) -> No
         await message.answer(texts.FEEDBACK_UNAVAILABLE)
         return
     template = texts.FEEDBACK_ADMIN_REVIEW if kind == "review" else texts.FEEDBACK_ADMIN_COMPLAINT
-    admin_text = template.format(user_id=user_id, text=escape(text, quote=False))
+    context = data.get("dish_context")
+    body = f"{context}\n\n{text}" if isinstance(context, str) else text
+    admin_text = template.format(user_id=user_id, text=escape(body, quote=False))
     delivered = False
     for admin_id in settings.admin_ids:
         try:
@@ -105,7 +132,11 @@ async def on_text(message: Message, state: FSMContext, settings: Settings) -> No
 def register(router: Router) -> None:
     """Attach feedback handlers to the application router."""
     router.message.register(cmd_feedback, Command("feedback"))
-    router.message.register(on_feedback_button, F.text == texts.BTN_NAV_FEEDBACK)
+    router.message.register(cmd_feedback, F.text == texts.BTN_NAV_FEEDBACK)  # legacy keyboards
+    router.callback_query.register(on_feedback_button, F.data == "feedback:open")
+    router.callback_query.register(
+        on_report, F.data.startswith("plan:") & F.data.endswith(":report")
+    )
     router.callback_query.register(on_cancel, FeedbackFlow.kind, F.data == "feedback:cancel")
     router.callback_query.register(on_cancel, FeedbackFlow.text, F.data == "feedback:cancel")
     router.callback_query.register(on_kind, FeedbackFlow.kind, F.data.startswith("feedback:"))
