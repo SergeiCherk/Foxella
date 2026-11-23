@@ -107,11 +107,8 @@ BTN_NAV_SHOPPING = "🛒 Покупки"
 BTN_NAV_SLIP = "🔄 Не по плану"
 BTN_NAV_PROFILE = "👤 Профиль"
 BTN_NAV_FEEDBACK = "💬 Отзыв или жалоба"
-NAV_LABELS = (BTN_NAV_MENU, BTN_NAV_SHOPPING, BTN_NAV_SLIP, BTN_NAV_PROFILE, BTN_NAV_FEEDBACK)
-NAV_HINT = (
-    "👇 Кнопки внизу теперь всегда под рукой: меню, покупки, «Не по плану», профиль "
-    "и обратная связь в одно касание."
-)
+NAV_LABELS = (BTN_NAV_MENU, BTN_NAV_SHOPPING, BTN_NAV_SLIP, BTN_NAV_PROFILE)
+NAV_HINT = "👇 Кнопки внизу теперь всегда под рукой: меню, покупки, «Не по плану» и профиль."
 
 FEEDBACK_TITLE = "💬 <b>Обратная связь</b>"
 FEEDBACK_CHOOSE = "Что хочешь отправить?"

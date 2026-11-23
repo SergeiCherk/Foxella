@@ -232,15 +232,24 @@ class UserRepository:
         user.pending_adjust = json.dumps([float(d) for d in deltas])
         await self._session.commit()
 
-    async def save_menu(self, telegram_id: int, days: Sequence[Sequence[Meal]]) -> None:
+    async def save_menu(self, telegram_id: int, days: Sequence[Sequence[Meal]]) -> datetime:
         """Keep the latest menu (the previous one is replaced)."""
         menu = await self._session.get(MenuORM, telegram_id)
         if menu is None:
             menu = MenuORM(telegram_id=telegram_id, payload="")
             self._session.add(menu)
         menu.payload = menu_to_json(days)
-        menu.created_at = datetime.now(UTC)  # a new menu starts today
+        created = menu.created_at = datetime.now(UTC)  # a new menu starts today
         await self._session.commit()
+        return created
+
+    async def get_saved_menu(self, telegram_id: int) -> tuple[list[Day], datetime] | None:
+        """Load a plan and its version together."""
+        row = await self._session.get(MenuORM, telegram_id)
+        if row is None or not (days := menu_from_json(row.payload)):
+            return None
+        created = row.created_at
+        return days, created.replace(tzinfo=UTC) if created.tzinfo is None else created
 
     async def get_menu_created_at(self, telegram_id: int) -> datetime | None:
         """When the latest menu was made (UTC), or ``None`` if there is no menu."""

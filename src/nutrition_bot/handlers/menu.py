@@ -30,7 +30,7 @@ from nutrition_bot.core.metrics import EventName
 from nutrition_bot.core.norms import calculate_daily_norm
 from nutrition_bot.core.recipe_check import MentionFinder
 from nutrition_bot.db.repositories.users import UserRepository
-from nutrition_bot.handlers import keyboards
+from nutrition_bot.handlers import keyboards, menu_cards
 from nutrition_bot.handlers.common import (
     answer_remembered,
     apply_choice,
@@ -43,7 +43,7 @@ from nutrition_bot.handlers.common import (
 )
 from nutrition_bot.handlers.guard import MenuGuard
 from nutrition_bot.handlers.onboarding import NOT_A_COMMAND
-from nutrition_bot.handlers.render import html_text, render_day, render_hints
+from nutrition_bot.handlers.render import html_text, render_hints
 from nutrition_bot.handlers.states import MenuFlow
 from nutrition_bot.services.food_parser import FoodParser
 
@@ -71,12 +71,23 @@ async def start_menu(
 
 
 async def cmd_menu(
-    message: Message, state: FSMContext, session_factory: SessionFactory, settings: Settings
+    message: Message,
+    state: FSMContext,
+    session_factory: SessionFactory,
+    settings: Settings,
+    catalog: Catalog,
 ) -> None:
-    """/menu"""
+    """Open the saved plan, or start a new one if necessary."""
     user_id = sender_id(message)
-    if user_id is not None:
+    if user_id is None:
+        return
+    async with session_factory() as session:
+        saved = await UserRepository(session).get_saved_menu(user_id)
+    if saved is None:
         await start_menu(message, user_id, state, session_factory, settings)
+    else:
+        await state.clear()
+        await menu_cards.send_card(message, catalog, *saved)
 
 
 async def on_menu_button(
@@ -321,13 +332,11 @@ async def _build_and_send(
     async with session_factory() as session:
         repo = UserRepository(session)
         await repo.set_pantry(user_id, pantry)
-        await repo.save_menu(user_id, menu)
+        created = await repo.save_menu(user_id, menu)
         await repo.set_adjustments(user_id, [])
 
-    messages: list[str] = []
     hints: list[BalanceHint] = []
-    for number, meals in enumerate(menu, start=1):
-        messages += render_day(catalog, number, meals)
+    for meals in menu:
         hints += analyze_day(catalog, meals, norm.target, settings.balance)
     if pantry:
         hints += pantry_hints(catalog, pantry, settings.balance)
@@ -339,10 +348,9 @@ async def _build_and_send(
     hint_block = render_hints(hints)
     closing = [hint_block] if hint_block else []
     closing += [f"<i>{note}</i>" for note in notes]
-    closing.append(texts.MENU_DONE)
-    for text in messages:
-        await message.answer(text)
-    await message.answer("\n\n".join(closing), reply_markup=keyboards.after_menu_keyboard())
+    await menu_cards.send_card(
+        message, catalog, [tuple(day) for day in menu], created, notes="\n\n".join(closing)
+    )
     await track(session_factory, user_id, EventName.MENU_RECEIVED)
 
 
@@ -351,6 +359,9 @@ def register(router: Router) -> None:
     router.message.register(cmd_menu, Command("menu"))
     router.message.register(cmd_menu, F.text == texts.BTN_NAV_MENU)
     router.callback_query.register(on_menu_button, F.data == "menu:start")
+    router.callback_query.register(
+        menu_cards.view_card, F.data.startswith("plan:") & ~F.data.endswith(":report")
+    )
     router.callback_query.register(on_days, MenuFlow.days, F.data.startswith("days:"))
     router.callback_query.register(
         on_pantry_button, MenuFlow.products, F.data.startswith("pantry:")

@@ -186,6 +186,24 @@ def test_resolution_prefers_the_alternative_the_user_has(
     assert "pollock_cooked" not in codes(catalog, dish)
 
 
+@pytest.mark.parametrize(
+    ("name", "cues"),
+    [
+        ("Рыба с картофелем и огурцом", ("духовку до 160 °C", "10–15 минут", "74 °C")),
+        ("Рис с курицей и брокколи", ("3–5 минут", "вилка", "готовую куриную", "74 °C")),
+        ("Омлет с помидором и огурцом", ("среднем огне", "2–3 минуты", "варёные яйца")),
+    ],
+)
+def test_fallback_recipes_give_practical_steps_for_the_catalog_ingredients(
+    name: str, cues: tuple[str, ...]
+) -> None:
+    template = next(t for t in FALLBACK_TEMPLATES if t.name == name)
+    assert template.recipe.startswith("1. ")
+    assert " 2. " in template.recipe
+    for cue in cues:
+        assert cue in template.recipe
+
+
 # ------------------------------------------------------------ variety
 
 

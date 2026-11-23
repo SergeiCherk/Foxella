@@ -282,8 +282,7 @@ async def test_a_stalled_provider_cannot_keep_the_user_waiting(
     started = time.perf_counter()
     text = joined(await make_menu(app, days=2))
     assert time.perf_counter() - started < 5
-    assert "День 1" in text
-    assert "День 2" in text
+    assert "День 1 из 2" in text
     assert len(llm.requests) == 1
 
 
