@@ -127,6 +127,7 @@ async def menu(app: BotHarness) -> str:
     await t.press("days:1")
     replies = await t.say("курица, гречка, помидоры, огурцы, яйца, творог")
     replies = await t.press_first_choice(replies)
+    await t.press(replies[-1].buttons[0])
     return t.render(
         "Меню на день",
         "Продукты пишутся обычным текстом. Если слово подходит к нескольким продуктам "
