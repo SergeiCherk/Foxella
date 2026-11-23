@@ -17,6 +17,7 @@ from nutrition_bot.services.llm import (
     OpenAICompatibleLLM,
     build_llm,
     build_prompt,
+    day_system_prompt,
     dishes_to_json,
 )
 from tests.catalog_helpers import cooked_or_ready_ids, real_catalog
@@ -90,6 +91,27 @@ def test_system_prompt_states_the_rules_that_the_validator_enforces() -> None:
         "Не указывай калории",
     ):
         assert fragment in SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize("system", [SYSTEM_PROMPT, day_system_prompt()], ids=["meal", "day"])
+def test_menu_prompts_request_practical_portion_independent_recipes(system: str) -> None:
+    system = " ".join(system.split())
+    for fragment in (
+        '"recipe": "1. Первый шаг. 2. Второй шаг."',
+        "нумерованными шагами",
+        "температуру предварительного разогрева",
+        "примерное время",
+        "надёжный признак готовности",
+        "только продукты из items этого блюда",
+        "иначе не используй их",
+        "количества продуктов и числа порций",
+        "Не заменяй готовые продукты сырыми",
+        "не советуй её мыть",
+        "74 °C в самой толстой части",
+        "время и цвет не заменяют эту проверку",
+        "При разогреве охлаждённой готовой птицы тоже укажи 74 °C в центре",
+    ):
+        assert fragment in system
 
 
 # ----------------------------------------------------------------- serialisation
