@@ -24,13 +24,13 @@ Telegram-бот «Питание без весов». Фоксела счита�
 
 <table>
   <tr>
-    <td align="center" valign="top"><img src="docs/images/01-norma.png" width="260" alt="Норма калорий и БЖУ после анкеты"><br><sub>Норма на день</sub></td>
-    <td align="center" valign="top"><img src="docs/images/02-menu.png" width="260" alt="Обед из трёх блюд в бытовых мерах со свёрнутыми рецептами"><br><sub>Меню без весов</sub></td>
-    <td align="center" valign="top"><img src="docs/images/03-pokupki.png" width="260" alt="Список покупок по разделам магазина"><br><sub>Список покупок</sub></td>
+    <td align="center" valign="top"><img src="docs/images/06-norma-telegram.png" width="260" alt="Актуальный экран с рассчитанной дневной нормой и кнопками меню"><br><sub>Актуальная норма</sub></td>
+    <td align="center" valign="top"><img src="docs/images/07-menu-telegram.png" width="260" alt="Актуальная карточка меню на день с блюдами и навигацией по приёмам пищи"><br><sub>Карточка меню</sub></td>
+    <td align="center" valign="top"><img src="docs/images/08-shopping-telegram.png" width="260" alt="Актуальный список покупок, сгруппированный по категориям"><br><sub>Покупки</sub></td>
   </tr>
   <tr>
-    <td align="center" valign="top"><img src="docs/images/04-sel.png" width="260" alt="Борщ со сметаной и пицца: бот уточняет сметану и спрашивает, сверх плана или вместо приёма пищи"><br><sub>«Было не по плану»</sub></td>
-    <td align="center" valign="top"><img src="docs/images/05-ogranicheniya.png" width="260" alt="Ограничения в еде: без мяса и без орехов отмечены"><br><sub>Ограничения в еде</sub></td>
+    <td align="center" valign="top"><img src="docs/images/09-slip-telegram.png" width="260" alt="Сценарий блюда не по плану с уточнением продуктов и выбором приёма пищи"><br><sub>Коррекция дня</sub></td>
+    <td align="center" valign="top"><img src="docs/images/10-restrictions-telegram.png" width="260" alt="Выбор ограничений в еде с отмеченными вариантами"><br><sub>Ограничения</sub></td>
     <td></td>
   </tr>
 </table>
@@ -71,7 +71,7 @@ Telegram-бот «Питание без весов». Фоксела счита�
       а остальное просто оставим как есть.
 ```
 
-> Скриншоты и GIF добавьте в `docs/` и сошлитесь на них здесь, когда запустите бота у себя.
+> В галерее выше показаны скриншоты текущего Telegram-интерфейса и предыдущей версии экранов.
 
 ## Как это устроено
 
